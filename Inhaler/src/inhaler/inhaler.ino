@@ -1,4 +1,5 @@
 #include <bluefruit.h>
+#include <time.h>
 
 typedef struct{
   int64_t timestamp;      // 8 bytes
@@ -32,24 +33,29 @@ void setup()
 
   //setup Inhaler BLE Characteristics
   BLECharacteristic inhalerTimeCharacteristic(inhalerTimeCharacteristicUuid);
-  inhalerTimeCharacteristic.setProperties.(CHR_PROPS_READ);
+  inhalerTimeCharacteristic.setProperties(CHR_PROPS_READ);
   inhalerTimeCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   
   BLECharacteristic inhalerIueCharacteristic(inhalerIueCharacteristicUuid);
-  inhalerIueCharacteristic.setProperties.(CHR_PROPS_READ);
+  inhalerIueCharacteristic.setProperties(CHR_PROPS_NOTIFY);
   inhalerIueCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   
-  Bluefruit.setName("Smart_Pin");
+  Bluefruit.setName("Smart Inhaler");
   Bluefruit.begin();
 
   /*
    * BLE Advertising Setup
    */
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
-  Bluefruit.Advertising.addService(pinService);
-  Bluefruit.Advertising.addAppearance(PIN_APPEARANCE);
+  Bluefruit.Advertising.addService(inhalerService);
+  Bluefruit.Advertising.addAppearance(INHALER_APPEARANCE);
   Bluefruit.Advertising.addName();
   Bluefruit.Advertising.start();
+
+  //start inhaler service and attach characteristic
+  inhalerService.begin();
+  inhalerIueCharacteristic.begin();
+  
 
   /*
    * NON BLE SETUP
@@ -60,6 +66,11 @@ void setup()
   Serial.begin(115200);
   while(!Serial);
   Serial.println("Serial Connected");
+
+  //create and send test data
+  IUE_t iueTest;
+  iueTest.timestamp = time(NULL);
+  inhalerIueCharacteristic.notify(&iueTest, 4);
 }
 
 void loop() 

@@ -44,6 +44,7 @@ void setup()
    * BLE Advertising Setup
    */
   Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addUuid(pinServiceUuid); //android app looks for service uuid in advertising
   Bluefruit.Advertising.addService(pinService);
   Bluefruit.Advertising.addAppearance(PIN_APPEARANCE);
   Bluefruit.Advertising.addName();
