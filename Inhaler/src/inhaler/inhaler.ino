@@ -11,8 +11,24 @@ typedef struct{
 #define INHALER_IUE_CHARACTERISTIC_UUID   "d7dc7c5048ce45a49c3e243a5bb75608"
 #define INHALER_APPEARANCE 0x03C0 //BLE Apperance code for human interface device
 
+//setup Inhaler UUIDs
+BLEUuid inhalerServiceUuid(INHALER_SERVICE_UUID);
+BLEUuid inhalerTimeCharacteristicUuid(INHALER_TIME_CHARACTERISTIC_UUID);
+BLEUuid inhalerIueCharacteristicUuid(INHALER_IUE_CHARACTERISTIC_UUID);
+
+//create service and characteristic classes
+BLEService inhalerService(inhalerServiceUuid);
+BLECharacteristic inhalerTimeCharacteristic(inhalerTimeCharacteristicUuid);
+BLECharacteristic inhalerIueCharacteristic(inhalerIueCharacteristicUuid);
+
+//create test IUE
+IUE_t iueTest;
+
 void setup() 
 {
+  //test sending IUE
+  attachInterrupt(digitalPinToInterrupt(7), sendIUE, RISING);
+  
   /*
    * BLEDIS setup
    */
@@ -23,39 +39,33 @@ void setup()
   /*
    * INHALER BLE SETUP
    */
-  //setup Inhaler UUIDs
-  BLEUuid inhalerServiceUuid(INHALER_SERVICE_UUID);
-  BLEUuid inhalerTimeCharacteristicUuid(INHALER_TIME_CHARACTERISTIC_UUID);
-  BLEUuid inhalerIueCharacteristicUuid(INHALER_IUE_CHARACTERISTIC_UUID);
-
   //setup Inhaler BLE Service
-  BLEService inhalerService(inhalerServiceUuid);
+  
 
   //setup Inhaler BLE Characteristics
-  BLECharacteristic inhalerTimeCharacteristic(inhalerTimeCharacteristicUuid);
   inhalerTimeCharacteristic.setProperties(CHR_PROPS_READ);
   inhalerTimeCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-  
-  BLECharacteristic inhalerIueCharacteristic(inhalerIueCharacteristicUuid);
-  inhalerIueCharacteristic.setProperties(CHR_PROPS_NOTIFY);
+    
+  inhalerIueCharacteristic.setProperties(CHR_PROPS_INDICATE); //has to be set to indicate for app to allow transfer
   inhalerIueCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-  
+
+  //initialize ble settings
   Bluefruit.setName("Smart Inhaler");
   Bluefruit.begin();
-
-  /*
-   * BLE Advertising Setup
-   */
-  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
-  Bluefruit.Advertising.addService(inhalerService);
-  Bluefruit.Advertising.addAppearance(INHALER_APPEARANCE);
-  Bluefruit.Advertising.addName();
-  Bluefruit.Advertising.start();
 
   //start inhaler service and attach characteristic
   inhalerService.begin();
   inhalerIueCharacteristic.begin();
   
+  /*
+   * BLE Advertising Setup
+   */
+  Bluefruit.Advertising.addFlags(BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE);
+  Bluefruit.Advertising.addUuid(inhalerServiceUuid); //android app looks for service uuid in advertising
+  Bluefruit.Advertising.addService(inhalerService);
+  Bluefruit.Advertising.addAppearance(INHALER_APPEARANCE);
+  Bluefruit.Advertising.addName();
+  Bluefruit.Advertising.start();
 
   /*
    * NON BLE SETUP
@@ -67,13 +77,48 @@ void setup()
   while(!Serial);
   Serial.println("Serial Connected");
 
-  //create and send test data
-  IUE_t iueTest;
-  iueTest.timestamp = time(NULL);
-  inhalerIueCharacteristic.notify(&iueTest, 4);
+  //create test data
+  //iueTest.timestamp = 1649569555; //April 9, 2022
+  iueTest.timestamp = 0x0000000099999999;
 }
 
 void loop() 
 {
+ /*
+  //check for connection
+  if(Bluefruit.connected(Bluefruit.connHandle()))
+  {
+    Serial.println("CONNECTED");
+    BLEConnection* con = Bluefruit.Connection(Bluefruit.connHandle()); 
+    Serial.print("Role: ");
+    Serial.println(con->getRole());
+    Serial.print("Con Interval: ");
+    Serial.println(con->getConnectionInterval());
+  }
+  delay(1000);
+  */
+  
+  
+  
 
+}
+
+void sendIUE()
+{
+  Serial.println("Recieved Interrupt");
+  iueTest.timestamp += 10;
+  
+  int8_t* iue_ptr = (int8_t*) &iueTest;
+  Serial.print("sending IUE: ");
+  for(int i = 0; i < sizeof(IUE_t); i++)
+  {
+    Serial.print("<");
+    Serial.print(iue_ptr[i]);
+    Serial.print(">");
+  }
+  Serial.println();
+
+  if(Bluefruit.connected(Bluefruit.connHandle()))
+    inhalerIueCharacteristic.indicate(&iueTest, sizeof(IUE_t));
+  
 }
