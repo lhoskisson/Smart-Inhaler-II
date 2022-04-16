@@ -21,19 +21,23 @@ BLEService inhalerService(inhalerServiceUuid);
 BLECharacteristic inhalerTimeCharacteristic(inhalerTimeCharacteristicUuid);
 BLECharacteristic inhalerIueCharacteristic(inhalerIueCharacteristicUuid);
 
+BLEDis bledis;
+
 //create test IUE
-IUE_t iueTest;
+volatile IUE_t iueTest;
+
+//flags
+bool iueTriggered = false;
 
 void setup() 
 {
   //test sending IUE
-  attachInterrupt(digitalPinToInterrupt(7), sendIUE, RISING);
+  attachInterrupt(digitalPinToInterrupt(7), setIueTriggered, RISING);
   
   /*
    * BLEDIS setup
    */
-   BLEDis bledis;
-   bledis.setModel("Bluefruit Feather52");
+   //bledis.setModel("Bluefruit Feather52");
    bledis.begin();
 
   /*
@@ -48,6 +52,12 @@ void setup()
     
   inhalerIueCharacteristic.setProperties(CHR_PROPS_INDICATE); //has to be set to indicate for app to allow transfer
   inhalerIueCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
+  inhalerIueCharacteristic.setFixedLen(sizeof(IUE_t));
+
+/*
+  iueTest.timestamp = 0;
+  inhalerIueCharacteristic.indicate(&iueTest, sizeof(IUE_t));
+  */
 
   //initialize ble settings
   Bluefruit.setName("Smart Inhaler");
@@ -78,12 +88,25 @@ void setup()
   Serial.println("Serial Connected");
 
   //create test data
-  //iueTest.timestamp = 1649569555; //April 9, 2022
-  iueTest.timestamp = 0x0000000099999999;
+  iueTest.timestamp = 1649824988;
+  //iueTest.timestamp = 0x00000000FFFFFFFF;
+  //iueTest.timestamp = 0xFFFFFFFF00000000;
 }
 
 void loop() 
 {
+  if(iueTriggered)
+  {
+    sendIUE();
+    iueTriggered = false;
+  }
+  /*
+  iueTest.timestamp += 5;
+  if(inhalerIueCharacteristic.indicate(&iueTest, sizeof(IUE_t)))
+    Serial.println("Indication Sent!");
+  delay(5000);
+  */
+  
  /*
   //check for connection
   if(Bluefruit.connected(Bluefruit.connHandle()))
@@ -99,26 +122,33 @@ void loop()
   */
   
   
-  
 
 }
 
 void sendIUE()
 {
+  IUE_t iue;
+  iue.timestamp = iueTest.timestamp;
+  
   Serial.println("Recieved Interrupt");
-  iueTest.timestamp += 10;
   
   int8_t* iue_ptr = (int8_t*) &iueTest;
   Serial.print("sending IUE: ");
-  for(int i = 0; i < sizeof(IUE_t); i++)
+  for(int i = sizeof(IUE_t)-1; i != 0; i--)
   {
     Serial.print("<");
-    Serial.print(iue_ptr[i]);
+    Serial.print(iue_ptr[i], HEX);
     Serial.print(">");
   }
   Serial.println();
 
-  if(Bluefruit.connected(Bluefruit.connHandle()))
-    inhalerIueCharacteristic.indicate(&iueTest, sizeof(IUE_t));
-  
+  if(Bluefruit.connected(Bluefruit.connHandle())) //for debug when not connected to app
+    if(inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t)))
+      Serial.println("Indication Sent!");
+}
+
+void setIueTriggered()
+{
+  iueTriggered = true;
+  iueTest.timestamp += 16;
 }
