@@ -1,5 +1,6 @@
 #include <bluefruit.h>
-#include <time.h>
+
+//#define INHALER_SERIAL_ON
 
 typedef struct{
   int64_t timestamp;      // 8 bytes
@@ -11,7 +12,7 @@ typedef struct{
 #define INHALER_IUE_CHARACTERISTIC_UUID   "d7dc7c5048ce45a49c3e243a5bb75608"
 #define INHALER_APPEARANCE 0x03C0 //BLE Apperance code for human interface device
 
-//setup Inhaler UUIDs
+//setup Inhaler UUID classes
 BLEUuid inhalerServiceUuid(INHALER_SERVICE_UUID);
 BLEUuid inhalerTimeCharacteristicUuid(INHALER_TIME_CHARACTERISTIC_UUID);
 BLEUuid inhalerIueCharacteristicUuid(INHALER_IUE_CHARACTERISTIC_UUID);
@@ -37,7 +38,7 @@ void setup()
   /*
    * BLEDIS setup
    */
-   //bledis.setModel("Bluefruit Feather52");
+   bledis.setModel("Bluefruit Feather52");
    bledis.begin();
 
   /*
@@ -82,13 +83,16 @@ void setup()
    */
   pinMode(LED_BUILTIN, OUTPUT);
 
+#ifdef INHALER_SERIAL_ON
   //setup serial connection for debug
   Serial.begin(115200);
   while(!Serial);
   Serial.println("Serial Connected");
+#endif
 
   //create test data
-  iueTest.timestamp = 1649824988;
+  //iueTest.timestamp = 1649824988*1000;
+  iueTest.timestamp = 1650407841131;
   //iueTest.timestamp = 0x00000000FFFFFFFF;
   //iueTest.timestamp = 0xFFFFFFFF00000000;
 }
@@ -129,7 +133,8 @@ void sendIUE()
 {
   IUE_t iue;
   iue.timestamp = iueTest.timestamp;
-  
+
+#ifdef INHALER_SERIAL_ON
   Serial.println("Recieved Interrupt");
   
   int8_t* iue_ptr = (int8_t*) &iueTest;
@@ -141,10 +146,17 @@ void sendIUE()
     Serial.print(">");
   }
   Serial.println();
+#endif
 
-  if(Bluefruit.connected(Bluefruit.connHandle())) //for debug when not connected to app
-    if(inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t)))
+  if(Bluefruit.connected(Bluefruit.connHandle()))
+  {
+    bool retVal = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
+    
+#ifdef INHALER_SERIAL_ON
+    if(retVal)
       Serial.println("Indication Sent!");
+#endif
+  }
 }
 
 void setIueTriggered()
