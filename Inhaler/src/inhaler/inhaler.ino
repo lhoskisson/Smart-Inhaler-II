@@ -1,10 +1,14 @@
 #include <bluefruit.h>
+#include <DS3232RTC.h>
+#include <Streaming.h>
 
 //#define INHALER_SERIAL_ON
 
 typedef struct{
   int64_t timestamp;      // 8 bytes
 } IUE_t;
+
+DS3232RTC RTC;
 
 //Inhaler UUIDs
 #define INHALER_SERVICE_UUID              "e814c25d7107459eb25d23fec96d49da"
@@ -90,11 +94,47 @@ void setup()
   Serial.println("Serial Connected");
 #endif
 
-  //create test data
-  //iueTest.timestamp = 1649824988*1000;
-  iueTest.timestamp = 1650407841131;
-  //iueTest.timestamp = 0x00000000FFFFFFFF;
-  //iueTest.timestamp = 0xFFFFFFFF00000000;
+  //RTC setup
+  RTC.begin();
+  setSyncProvider(RTC.get);
+#ifdef INHALER_SERIAL_ON
+  if(timeStatus() != timeSet)
+    Serial.println("Unable to sync with the RTC");
+  else
+    Serial.println("RTC has set the system time");
+#endif
+
+//EXAMPLE CODE FROM RTC Library to set RTC with Serial input
+#ifdef INHALER_SERIAL_ON
+// check for input to set the RTC, minimum length is 12, i.e. yy,m,d,h,m,s
+    if (Serial.available() >= 12) {
+        // note that the tmElements_t Year member is an offset from 1970,
+        // but the RTC wants the last two digits of the calendar year.
+        // use the convenience macros from the Time Library to do the conversions.
+        int y = Serial.parseInt();
+        if (y >= 100 && y < 1000)
+            Serial << F("Error: Year must be two digits or four digits!") << endl;
+        else {
+            if (y >= 1000)
+                tm.Year = CalendarYrToTm(y);
+            else    // (y < 100)
+                tm.Year = y2kYearToTm(y);
+            tm.Month = Serial.parseInt();
+            tm.Day = Serial.parseInt();
+            tm.Hour = Serial.parseInt();
+            tm.Minute = Serial.parseInt();
+            tm.Second = Serial.parseInt();
+            t = makeTime(tm);
+            myRTC.set(t);   // use the time_t value to ensure correct weekday is set
+            setTime(t);
+            Serial << F("RTC set to: ");
+            printDateTime(t);
+            Serial << endl;
+            // dump any extraneous input
+            while (Serial.available() > 0) Serial.read();
+        }
+    }
+#endif
 }
 
 void loop() 
@@ -104,35 +144,12 @@ void loop()
     sendIUE();
     iueTriggered = false;
   }
-  /*
-  iueTest.timestamp += 5;
-  if(inhalerIueCharacteristic.indicate(&iueTest, sizeof(IUE_t)))
-    Serial.println("Indication Sent!");
-  delay(5000);
-  */
-  
- /*
-  //check for connection
-  if(Bluefruit.connected(Bluefruit.connHandle()))
-  {
-    Serial.println("CONNECTED");
-    BLEConnection* con = Bluefruit.Connection(Bluefruit.connHandle()); 
-    Serial.print("Role: ");
-    Serial.println(con->getRole());
-    Serial.print("Con Interval: ");
-    Serial.println(con->getConnectionInterval());
-  }
-  delay(1000);
-  */
-  
-  
-
 }
 
 void sendIUE()
 {
   IUE_t iue;
-  iue.timestamp = iueTest.timestamp;
+  iue.timestamp = getTime();
 
 #ifdef INHALER_SERIAL_ON
   Serial.println("Recieved Interrupt");
@@ -159,8 +176,25 @@ void sendIUE()
   }
 }
 
+/*
+ * IUE interrupt routine
+ */
 void setIueTriggered()
 {
   iueTriggered = true;
-  iueTest.timestamp += 16;
+}
+
+/*
+ * Gets the time from the RTC in epoch seconds and returns it as a time_t 
+ */
+time_t getTime()
+{
+  int64_t t;
+  tmElements_t tm;
+  int8_t retVal = RTC.read(tm);
+#ifdef INHALER_SERIAL_ON
+  if(retVal != 0)
+    Serial.println("Could not read time from RTC");
+#endif
+  return makeTime(tm);
 }

@@ -1,6 +1,6 @@
 #include <bluefruit.h>
 
-#define PIN_SERIAL_ON
+//#define PIN_SERIAL_ON
 
 typedef struct{
   float temperature;            // 4 bytes - little endian
@@ -35,13 +35,13 @@ void setup()
   Serial.begin(115200);
   while(!Serial);
   Serial.println("Serial Connected");
+  Serial.flush();
 #endif
 
   /*
    * BLEDIS setup
    */
    bledis.setModel("Bluefruit Feather52");
-   bledis.begin();
   
   /*
    * PIN BLE SETUP
@@ -49,12 +49,17 @@ void setup()
   pinDataCharacteristic.setProperties(CHR_PROPS_READ);
   pinDataCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   pinDataCharacteristic.setFixedLen(sizeof(wearable_data_t));
+  
+  //initialize ble settings
+  Bluefruit.setName("Smart Inhaler");
+  Bluefruit.begin();
 
+  bledis.begin();
+  
   //start pin service, and attach charactersitic
   pinService.begin();
   pinDataCharacteristic.begin();
 
-  Serial.println("Started Services and Characteristics");
   
   /*
    * BLE Advertising Setup
@@ -65,8 +70,6 @@ void setup()
   Bluefruit.Advertising.addAppearance(PIN_APPEARANCE);
   Bluefruit.Advertising.addName();
   Bluefruit.Advertising.start();
-
-  Serial.println("Started Advertising");
   
   /*
    * NON BLE SETUP
@@ -80,11 +83,14 @@ void setup()
   testData.character = 'f';
   testData.digit = 42;
 
-  //pinDataCharacteristic.write(&testData, sizeof(wearable_data_t));
+  pinDataCharacteristic.write(&testData, sizeof(wearable_data_t));
 }
 
 void loop() 
 {
+#ifdef PIN_SERIAL_ON
   Serial.println("In Loop");
+  Serial.flush();
   delay(5000);
+#endif
 }
