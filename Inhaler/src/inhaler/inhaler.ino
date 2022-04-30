@@ -2,7 +2,7 @@
 #include <DS3232RTC.h>
 #include <Streaming.h>
 
-//#define INHALER_SERIAL_ON
+#define INHALER_SERIAL_ON
 
 typedef struct{
   int64_t timestamp;      // 8 bytes
@@ -104,37 +104,7 @@ void setup()
     Serial.println("RTC has set the system time");
 #endif
 
-//EXAMPLE CODE FROM RTC Library to set RTC with Serial input
-#ifdef INHALER_SERIAL_ON
-// check for input to set the RTC, minimum length is 12, i.e. yy,m,d,h,m,s
-    if (Serial.available() >= 12) {
-        // note that the tmElements_t Year member is an offset from 1970,
-        // but the RTC wants the last two digits of the calendar year.
-        // use the convenience macros from the Time Library to do the conversions.
-        int y = Serial.parseInt();
-        if (y >= 100 && y < 1000)
-            Serial << F("Error: Year must be two digits or four digits!") << endl;
-        else {
-            if (y >= 1000)
-                tm.Year = CalendarYrToTm(y);
-            else    // (y < 100)
-                tm.Year = y2kYearToTm(y);
-            tm.Month = Serial.parseInt();
-            tm.Day = Serial.parseInt();
-            tm.Hour = Serial.parseInt();
-            tm.Minute = Serial.parseInt();
-            tm.Second = Serial.parseInt();
-            t = makeTime(tm);
-            myRTC.set(t);   // use the time_t value to ensure correct weekday is set
-            setTime(t);
-            Serial << F("RTC set to: ");
-            printDateTime(t);
-            Serial << endl;
-            // dump any extraneous input
-            while (Serial.available() > 0) Serial.read();
-        }
-    }
-#endif
+  setRTCSerial();
 }
 
 void loop() 
@@ -149,12 +119,12 @@ void loop()
 void sendIUE()
 {
   IUE_t iue;
-  iue.timestamp = getTime();
+  iue.timestamp = getTime()*1000; //multiply by 1000 because the app reqires milliseconds
 
 #ifdef INHALER_SERIAL_ON
   Serial.println("Recieved Interrupt");
   
-  int8_t* iue_ptr = (int8_t*) &iueTest;
+  int8_t* iue_ptr = (int8_t*) &iue;
   Serial.print("sending IUE: ");
   for(int i = sizeof(IUE_t)-1; i != 0; i--)
   {
@@ -197,4 +167,40 @@ time_t getTime()
     Serial.println("Could not read time from RTC");
 #endif
   return makeTime(tm);
+}
+
+void setRTCSerial()
+{
+  //EXAMPLE CODE FROM RTC Library to set RTC with Serial input
+#ifdef INHALER_SERIAL_ON
+    time_t t;
+    tmElements_t tm;
+// check for input to set the RTC, minimum length is 12, i.e. yy,m,d,h,m,s
+    Serial.println("Enter Date and time yy,m,d,h,m,s");
+    while(!Serial.available());
+    if (Serial.available() >= 12) {
+        // note that the tmElements_t Year member is an offset from 1970,
+        // but the RTC wants the last two digits of the calendar year.
+        // use the convenience macros from the Time Library to do the conversions.
+        int y = Serial.parseInt();
+        if (y >= 100 && y < 1000)
+            Serial << F("Error: Year must be two digits or four digits!") << endl;
+        else {
+            if (y >= 1000)
+                tm.Year = CalendarYrToTm(y);
+            else    // (y < 100)
+                tm.Year = y2kYearToTm(y);
+            tm.Month = Serial.parseInt();
+            tm.Day = Serial.parseInt();
+            tm.Hour = Serial.parseInt();
+            tm.Minute = Serial.parseInt();
+            tm.Second = Serial.parseInt();
+            t = makeTime(tm);
+            RTC.set(t);   // use the time_t value to ensure correct weekday is set
+            // dump any extraneous input
+            while (Serial.available() > 0) Serial.read();
+        }
+    }
+    Serial.println("leaving setRTC");
+#endif
 }
