@@ -1,14 +1,22 @@
 #include <bluefruit.h>
 #include <DS3232RTC.h>
-#include <Streaming.h>
+//#include <Streaming.h>
+#include <SPI.h>
+#include <SdFat.h>
+#include <Adafruit_SPIFlash.h>
+#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>  // Fuel gauge
+#include "Adafruit_MPRLS.h" //pressure sensor
+#include "IUE_t.h"
+#include "iueQueue.h"
 
 #define INHALER_SERIAL_ON
 
-typedef struct{
-  int64_t timestamp;      // 8 bytes
-} IUE_t;
+
 
 DS3232RTC RTC;
+Adafruit_FlashTransport_QSPI flashTransport;
+Adafruit_SPIFlash flash(&flashTransport);
+
 
 //Inhaler UUIDs
 #define INHALER_SERVICE_UUID              "e814c25d7107459eb25d23fec96d49da"
@@ -184,7 +192,7 @@ void setRTCSerial()
         // use the convenience macros from the Time Library to do the conversions.
         int y = Serial.parseInt();
         if (y >= 100 && y < 1000)
-            Serial << F("Error: Year must be two digits or four digits!") << endl;
+          Serial.println(F("Error: Year must be two digits or four digits!"));
         else {
             if (y >= 1000)
                 tm.Year = CalendarYrToTm(y);
