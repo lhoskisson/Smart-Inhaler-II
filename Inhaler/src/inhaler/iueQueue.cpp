@@ -1,35 +1,38 @@
 #include "iueQueue.h"
 
-iueQueue:iueQueue()
+iueQueue::iueQueue()
 {
   initializeHeadTail();
 }
 
 void iueQueue::enqueue(IUE_t iue)
 {
-  char[IUE_FILENAME_MAX_LENGTH] fileName;
+  char fileName[IUE_FILENAME_MAX_LENGTH];
   i_to_cstr(tail++, fileName, IUE_FILENAME_MAX_LENGTH);
 #ifdef INHALER_SERIAL_ON
   Serial.print("enqueuing ");
   Serial.print(fileName);
   Serial.print(" with ");
-  Serial.println(iue.timestamp);
+  printIUE(iue);
+  Serial.println();
 #endif
   noInterrupts();
   if(fs.exists(fileName))
     fs.remove(fileName);
   File iueFile = fs.open(fileName, FILE_WRITE);
-  iueFile.print(iue.timestamp);
+  char iue_cstr[IUE_MAX_LENGTH+1]; //+1 for null terminator
+  i_to_cstr(iue.timestamp, iue_cstr, IUE_MAX_LENGTH+1);
+  iueFile.print(iue_cstr);
   iueFile.close();
   interrupts();
-  updateQueueTailFile();
+  updateTailFile();
 }
 
 IUE_t iueQueue::dequeue()
 {
   IUE_t iue;
   iue.timestamp = 0;
-  char[IUE_FILENAME_MAX_LENGTH] fileName;
+  char fileName[IUE_FILENAME_MAX_LENGTH];
   i_to_cstr(head++, fileName, IUE_FILENAME_MAX_LENGTH);
   if(fs.exists(fileName))
   {
@@ -43,7 +46,7 @@ IUE_t iueQueue::dequeue()
 #ifdef INHALER_SERIAL_ON
   if(sizeof(long) != sizeof(IUE_t)) Serial.println("IUE Size Mismatch from file");
   Serial.print("dequeued ");
-  Serial.print(iue.timestamp);
+  printIUE(iue);
   Serial.print(" from ");
   Serial.println(fileName);
 #endif
@@ -52,16 +55,17 @@ IUE_t iueQueue::dequeue()
     head = 0;
     tail = 0;
   }
+  updateHeadFile();
   return iue;
 }
 
-int16_t iueQueue::getQueueSize()
+int16_t iueQueue::size()
 {
   return tail - head;
 }
 
 //converts len-1 digits (lsd to msd) of an integer n to a c-string s
-void iueQueue::i_to_cstr(int16_t n, char* s, const int len)
+void iueQueue::i_to_cstr(int64_t n, char* s, const int len)
 {
   //get number of digits in n
   int digits = 1;
@@ -78,15 +82,17 @@ void iueQueue::i_to_cstr(int16_t n, char* s, const int len)
     
   //make string
   int mod = 10;
-  for(int i = 0; i < digits-1; i++) mod *= 10;
-  for(int i = 0; i < (useDigits ? digits : len-1); i++)
+  //for(int i = 0; i < digits-1; i++) mod *= 10;
+  for(int i = (useDigits ? digits-1 : len-2); i >= 0; i--)
   {
     s[i] = (n % mod) + 48; //48 is ascii for '0'
-    mod /= 10;
+    n /= 10;
+    //mod /= 10;
   }
 #ifdef INHALER_SERIAL_ON
   Serial.print("i_to_cstr converted int ");
-  Serial.print(n);
+  int32_t* ptr = (int32_t*) &n; //fixme: temporary testing
+  Serial.print(ptr[0]);
   Serial.print(" to cstr ");
   Serial.println(s);
 #endif
@@ -113,7 +119,7 @@ int16_t iueQueue::getHeadFromFile()
   if(!fs.exists(HEAD_FILENAME))
     return 0;
   File headFile = fs.open(HEAD_FILENAME, FILE_READ);
-  int16_t _head = queueSizeFile.parseInt();
+  int16_t _head = headFile.parseInt();
   headFile.close();
   interrupts();
 #ifdef INHALER_SERIAL_ON
@@ -144,7 +150,7 @@ int16_t iueQueue::getTailFromFile()
   if(!fs.exists(TAIL_FILENAME))
     return 0;
   File tailFile = fs.open(TAIL_FILENAME, FILE_READ);
-  int16_t _tail = queueSizeFile.parseInt();
+  int16_t _tail = tailFile.parseInt();
   tailFile.close();
   interrupts();
 #ifdef INHALER_SERIAL_ON
@@ -176,4 +182,9 @@ void iueQueue::initializeHeadTail()
   {
     //check for files up to tail to see where head should be  
   }
+}
+
+bool iueQueue::empty()
+{
+  return (head == tail);
 }

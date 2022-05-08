@@ -1,0 +1,1 @@
+#define INHALER_SERIAL_ON

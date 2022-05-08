@@ -9,11 +9,15 @@
 #include "IUE_t.h"
 #include "iueQueue.h"
 
-#define INHALER_SERIAL_ON
+#include "inhalerDebug.h"
 
+//#define RTC_CONNECTED
 
-
+#ifdef RTC_CONNECTED
 DS3232RTC RTC;
+#endif
+
+iueQueue q;
 Adafruit_FlashTransport_QSPI flashTransport;
 Adafruit_SPIFlash flash(&flashTransport);
 
@@ -102,7 +106,10 @@ void setup()
   Serial.println("Serial Connected");
 #endif
 
-  //RTC setup
+ /*
+  * RTC SETUP
+  */
+#ifdef RTC_CONNECTED
   RTC.begin();
   setSyncProvider(RTC.get);
 #ifdef INHALER_SERIAL_ON
@@ -111,8 +118,8 @@ void setup()
   else
     Serial.println("RTC has set the system time");
 #endif
-
   setRTCSerial();
+#endif
 }
 
 void loop() 
@@ -127,31 +134,36 @@ void loop()
 void sendIUE()
 {
   IUE_t iue;
+#ifdef RTC_CONNECTED
   iue.timestamp = getTime()*1000; //multiply by 1000 because the app reqires milliseconds
+#else
+  iue.timestamp = 0x180A1AE1D03;
+#endif
 
 #ifdef INHALER_SERIAL_ON
   Serial.println("Recieved Interrupt");
-  
-  int8_t* iue_ptr = (int8_t*) &iue;
-  Serial.print("sending IUE: ");
-  for(int i = sizeof(IUE_t)-1; i != 0; i--)
-  {
-    Serial.print("<");
-    Serial.print(iue_ptr[i], HEX);
-    Serial.print(">");
-  }
+  printIUE(iue);
   Serial.println();
 #endif
 
+  q.enqueue(iue);
+
+  //if there is a BLE connection, the IUE queue is uploaded
   if(Bluefruit.connected(Bluefruit.connHandle()))
   {
-    bool retVal = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
-    
+    while(!q.empty())
+    {
+      iue = q.dequeue();
+      bool retVal = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
 #ifdef INHALER_SERIAL_ON
-    if(retVal)
-      Serial.println("Indication Sent!");
+      if(retVal)
+        Serial.println("Indication Sent!");
 #endif
+    } 
   }
+#ifdef INHALER_SERIAL_ON
+  Serial.println();
+#endif   
 }
 
 /*
@@ -165,6 +177,7 @@ void setIueTriggered()
 /*
  * Gets the time from the RTC in epoch seconds and returns it as a time_t 
  */
+#ifdef RTC_CONNECTED
 time_t getTime()
 {
   int64_t t;
@@ -176,7 +189,9 @@ time_t getTime()
 #endif
   return makeTime(tm);
 }
+#endif
 
+#ifdef RTC_CONNECTED
 void setRTCSerial()
 {
   //EXAMPLE CODE FROM RTC Library to set RTC with Serial input
@@ -212,3 +227,4 @@ void setRTCSerial()
     Serial.println("leaving setRTC");
 #endif
 }
+#endif
