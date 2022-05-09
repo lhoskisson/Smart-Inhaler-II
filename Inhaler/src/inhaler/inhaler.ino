@@ -180,7 +180,7 @@ void setIueTriggered()
 #ifdef RTC_CONNECTED
 time_t getTime()
 {
-  int64_t t;
+  uint64_t t;
   tmElements_t tm;
   int8_t retVal = RTC.read(tm);
 #ifdef INHALER_SERIAL_ON

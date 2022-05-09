@@ -59,17 +59,17 @@ IUE_t iueQueue::dequeue()
   return iue;
 }
 
-int16_t iueQueue::size()
+uint16_t iueQueue::size()
 {
   return tail - head;
 }
 
 //converts len-1 digits (lsd to msd) of an integer n to a c-string s
-void iueQueue::i_to_cstr(int64_t n, char* s, const int len)
+void iueQueue::i_to_cstr(uint64_t n, char* s, const int len)
 {
   //get number of digits in n
   int digits = 1;
-  for(int i = n/10; i != 0; i /= 10)
+  for(uint64_t i = n/10; i != 0; i /= 10)
     digits++;
 
   //determine whether to use digits or len as end of string
@@ -113,13 +113,13 @@ void iueQueue::updateHeadFile()
   interrupts();
 }
 
-int16_t iueQueue::getHeadFromFile()
+uint16_t iueQueue::getHeadFromFile()
 {
   noInterrupts();
   if(!fs.exists(HEAD_FILENAME))
     return 0;
   File headFile = fs.open(HEAD_FILENAME, FILE_READ);
-  int16_t _head = headFile.parseInt();
+  uint16_t _head = headFile.parseInt();
   headFile.close();
   interrupts();
 #ifdef INHALER_SERIAL_ON
@@ -144,13 +144,13 @@ void iueQueue::updateTailFile()
   interrupts();
 }
 
-int16_t iueQueue::getTailFromFile()
+uint16_t iueQueue::getTailFromFile()
 {
   noInterrupts();
   if(!fs.exists(TAIL_FILENAME))
     return 0;
   File tailFile = fs.open(TAIL_FILENAME, FILE_READ);
-  int16_t _tail = tailFile.parseInt();
+  uint16_t _tail = tailFile.parseInt();
   tailFile.close();
   interrupts();
 #ifdef INHALER_SERIAL_ON

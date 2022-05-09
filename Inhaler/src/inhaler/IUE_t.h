@@ -6,7 +6,7 @@
 #include "inhalerDebug.h"
 
 typedef struct{
-  int64_t timestamp;      // 8 bytes
+  uint64_t timestamp;      // 8 bytes
 } IUE_t;
 
 #ifdef INHALER_SERIAL_ON

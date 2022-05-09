@@ -23,22 +23,22 @@ class iueQueue
   iueQueue();
   void enqueue(IUE_t);
   IUE_t dequeue();
-  int16_t size();
+  uint16_t size();
   bool empty();
   
   private:
   FatFileSystem fs;
   
-  int16_t head;
+  uint16_t head;
   
-  int16_t tail;
+  uint16_t tail;
 
-  void i_to_cstr(int64_t n, char* s, const int len);
+  void i_to_cstr(uint64_t n, char* s, const int len);
 
   void updateHeadFile();
   void updateTailFile();
-  int16_t getHeadFromFile();
-  int16_t getTailFromFile();
+  uint16_t getHeadFromFile();
+  uint16_t getTailFromFile();
   void initializeHeadTail();
   
 };
