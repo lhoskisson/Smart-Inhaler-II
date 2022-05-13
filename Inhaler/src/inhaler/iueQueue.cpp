@@ -2,7 +2,19 @@
 
 iueQueue::iueQueue()
 {
+}
+
+void iueQueue::begin()
+{
+  probe(2);
+  flash = Adafruit_SPIFlash(&flashTransport);
+  probe(3);
+  while(!flash.begin());
+  probe(4);
+  while(!fs.begin(&flash));
+  probe(5);
   initializeHeadTail();
+  probe(6);
 }
 
 void iueQueue::enqueue(IUE_t iue)
@@ -10,21 +22,22 @@ void iueQueue::enqueue(IUE_t iue)
   char fileName[IUE_FILENAME_MAX_LENGTH];
   i_to_cstr(tail++, fileName, IUE_FILENAME_MAX_LENGTH);
 #ifdef INHALER_SERIAL_ON
-  Serial.print("enqueuing ");
+  Serial.print(F("enqueuing "));
   Serial.print(fileName);
-  Serial.print(" with ");
+  Serial.print(F(" with "));
   printIUE(iue);
-  Serial.println();
+  Serial.println("");
 #endif
-  noInterrupts();
+  //noInterrupts();
   if(fs.exists(fileName))
     fs.remove(fileName);
+
   File iueFile = fs.open(fileName, FILE_WRITE);
   char iue_cstr[IUE_MAX_LENGTH+1]; //+1 for null terminator
   i_to_cstr(iue.timestamp, iue_cstr, IUE_MAX_LENGTH+1);
   iueFile.print(iue_cstr);
   iueFile.close();
-  interrupts();
+  //Interrupts();
   updateTailFile();
 }
 
@@ -36,18 +49,34 @@ IUE_t iueQueue::dequeue()
   i_to_cstr(head++, fileName, IUE_FILENAME_MAX_LENGTH);
   if(fs.exists(fileName))
   {
-    noInterrupts();
+    //noInterrupts();
     File iueFile = fs.open(fileName, FILE_READ);
-    iue.timestamp = iueFile.parseInt();
+#ifdef INHALER_SERIAL_ON
+    Serial.print(F("opened file with size "));
+    Serial.println(iueFile.size());
+#endif
+    //while(fileChar != -1)
+    for(int i = 0; i < iueFile.size(); i++)
+    {
+      char fileChar;
+      iueFile.read(&fileChar, 1);
+      if(fileChar < '0' || fileChar > '9')
+        continue;
+      iue.timestamp *= 10;
+      iue.timestamp += fileChar - 48;
+#ifdef INHALER_SERIAL_ON
+      Serial.print(F("found "));
+      Serial.print(fileChar);
+#endif
+    }
     iueFile.close();
     fs.remove(fileName);
-    interrupts();
+    //Interrupts();
   }
 #ifdef INHALER_SERIAL_ON
-  if(sizeof(long) != sizeof(IUE_t)) Serial.println("IUE Size Mismatch from file");
-  Serial.print("dequeued ");
+  Serial.print(F("dequeued "));
   printIUE(iue);
-  Serial.print(" from ");
+  Serial.print(F(" from "));
   Serial.println(fileName);
 #endif
   if(head == tail)
@@ -90,40 +119,40 @@ void iueQueue::i_to_cstr(uint64_t n, char* s, const int len)
     //mod /= 10;
   }
 #ifdef INHALER_SERIAL_ON
-  Serial.print("i_to_cstr converted int ");
-  int32_t* ptr = (int32_t*) &n; //fixme: temporary testing
-  Serial.print(ptr[0]);
-  Serial.print(" to cstr ");
-  Serial.println(s);
+  Serial.print(F("i_to_cstr converted "));
+  Serial.print(F("<"));
+  Serial.print(s);
+  Serial.println(F(">"));
+  Serial.flush();
 #endif
 }
 
 void iueQueue::updateHeadFile()
 {
   #ifdef INHALER_SERIAL_ON
-  Serial.print("updating head file to ");
+  Serial.print(F("updating head file to "));
   Serial.println(head);
 #endif
-  noInterrupts();
+  //noInterrupts();
   if(fs.exists(HEAD_FILENAME))
     fs.remove(HEAD_FILENAME);
   File headFile = fs.open(HEAD_FILENAME, FILE_WRITE);
   headFile.print(head);
   headFile.close();
-  interrupts();
+  //Interrupts();
 }
 
 uint16_t iueQueue::getHeadFromFile()
 {
-  noInterrupts();
+  //noInterrupts();
   if(!fs.exists(HEAD_FILENAME))
     return 0;
   File headFile = fs.open(HEAD_FILENAME, FILE_READ);
   uint16_t _head = headFile.parseInt();
   headFile.close();
-  interrupts();
+  //Interrupts();
 #ifdef INHALER_SERIAL_ON
-  Serial.print("retreiving from head file: ");
+  Serial.print(F("retreiving from head file: "));
   Serial.println(_head);
 #endif  
   return _head;
@@ -132,29 +161,29 @@ uint16_t iueQueue::getHeadFromFile()
 void iueQueue::updateTailFile()
 {
 #ifdef INHALER_SERIAL_ON
-  Serial.print("updating tail file to ");
+  Serial.print(F("updating tail file to "));
   Serial.println(tail);
 #endif
-  noInterrupts();
+  //noInterrupts();
   if(fs.exists(TAIL_FILENAME))
     fs.remove(TAIL_FILENAME);
   File tailFile = fs.open(TAIL_FILENAME, FILE_WRITE);
   tailFile.print(tail);
   tailFile.close();
-  interrupts();
+  //Interrupts();
 }
 
 uint16_t iueQueue::getTailFromFile()
 {
-  noInterrupts();
+  //noInterrupts();
   if(!fs.exists(TAIL_FILENAME))
     return 0;
   File tailFile = fs.open(TAIL_FILENAME, FILE_READ);
   uint16_t _tail = tailFile.parseInt();
   tailFile.close();
-  interrupts();
+  //Interrupts();
 #ifdef INHALER_SERIAL_ON
-  Serial.print("retreiving from tail file: ");
+  Serial.print(F("retreiving from tail file: "));
   Serial.println(_tail);
 #endif  
   return _tail;
@@ -164,23 +193,51 @@ void iueQueue::initializeHeadTail()
 {
   head = getHeadFromFile();
   tail = getTailFromFile();
-
+  
   if(head == 0 && tail ==0)
     return;
 
-  if(head < tail)
+  if(head < tail || head == tail)
   {
     //check for files above and below head and tail
-  }
-  
-  if(head == tail)
-  {
-    //check for files above and below
+    char fileName[IUE_FILENAME_MAX_LENGTH];
+    i_to_cstr(head-1, fileName, IUE_FILENAME_MAX_LENGTH);
+    if(fs.exists(fileName))
+    {
+      head -= 1;
+      updateHeadFile();
+    }
+
+    i_to_cstr(tail+1, fileName, IUE_FILENAME_MAX_LENGTH);
+    if(fs.exists(fileName))
+    {
+      tail += 1;
+      updateHeadFile();
+    }
   }
   
   if(head > tail)
   {
-    //check for files up to tail to see where head should be  
+    //check for files up to tail to see where head should be
+    for(uint16_t i = 0; i != tail; i++)
+    {
+      char fileName[IUE_FILENAME_MAX_LENGTH];
+      i_to_cstr(i, fileName, IUE_FILENAME_MAX_LENGTH);
+      if(fs.exists(fileName))
+      {
+        head = i;
+        updateHeadFile();
+        break;
+      }
+    }
+    if(head > tail)
+    {
+      //no files up to tail, so reset
+      head = 0;
+      tail = 0;
+      updateHeadFile();
+      updateTailFile();
+    }
   }
 }
 

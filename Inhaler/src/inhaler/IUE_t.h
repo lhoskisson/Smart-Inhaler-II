@@ -2,6 +2,7 @@
 #define IUE_T_H
 
 #include "Arduino.h"
+#include <time.h>
 
 #include "inhalerDebug.h"
 
@@ -13,13 +14,17 @@ typedef struct{
 static void printIUE(IUE_t iue)
 {
  int8_t* iue_ptr = (int8_t*) &iue;
-  Serial.print("IUE: ");
+  Serial.print(F("IUE: "));
+  Serial.print(ctime((const time_t*) &iue.timestamp));
+  Serial.flush();
+  /*
   for(int i = sizeof(IUE_t)-1; i != 0; i--)
   {
     Serial.print("<");
     Serial.print((int8_t) iue_ptr[i], HEX);
     Serial.print(">");
   }
+  */
 }
 #endif
 

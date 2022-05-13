@@ -5,7 +5,7 @@
 typedef struct{
   float temperature;            // 4 bytes - little endian
   float humidity;               // 4 bytes - little endian
-  int32_t  particle_0_5_count;  // 4 bytes - little endian
+  int32_t  particle_2_5_count;  // 4 bytes - little endian
   int voc_data;                 // 4 bytes
   int co2_data;                 // 4 bytes
 } wearable_data_t;
@@ -78,10 +78,10 @@ void setup()
 
   //creating test data
   testData.temperature = 70.3;
-  testData.humidity = 16.4;
-  testData.particle_0_5_count = 542;
-  testData.voc_data = 19;
-  testData.co2_data = 42;
+  testData.humidity = 34.3;
+  testData.particle_2_5_count = 25;
+  testData.voc_data = 0;
+  testData.co2_data = 0;
 
   pinDataCharacteristic.write(&testData, sizeof(wearable_data_t));
 }

@@ -4,6 +4,8 @@
 #include "Arduino.h"
 #include "IUE_t.h"
 #include <SdFat.h>
+#include <SPI.h>
+#include <Adafruit_SPIFlash.h>
 
 #include "inhalerDebug.h"
 
@@ -21,6 +23,7 @@ class iueQueue
 {
   public:
   iueQueue();
+  void begin();
   void enqueue(IUE_t);
   IUE_t dequeue();
   uint16_t size();
@@ -28,6 +31,8 @@ class iueQueue
   
   private:
   FatFileSystem fs;
+  Adafruit_FlashTransport_QSPI flashTransport;
+  Adafruit_SPIFlash flash;
   
   uint16_t head;
   

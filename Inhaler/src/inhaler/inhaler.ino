@@ -17,16 +17,14 @@
 DS3232RTC RTC;
 #endif
 
-iueQueue q;
-Adafruit_FlashTransport_QSPI flashTransport;
-Adafruit_SPIFlash flash(&flashTransport);
-
-
 //Inhaler UUIDs
 #define INHALER_SERVICE_UUID              "e814c25d7107459eb25d23fec96d49da"
 #define INHALER_TIME_CHARACTERISTIC_UUID  "015529f7554c4138a71e40a2dfede10a"
 #define INHALER_IUE_CHARACTERISTIC_UUID   "d7dc7c5048ce45a49c3e243a5bb75608"
 #define INHALER_APPEARANCE 0x03C0 //BLE Apperance code for human interface device
+
+uint64_t iue_count = 0;
+iueQueue q;
 
 //setup Inhaler UUID classes
 BLEUuid inhalerServiceUuid(INHALER_SERVICE_UUID);
@@ -48,6 +46,19 @@ bool iueTriggered = false;
 
 void setup() 
 {
+
+#ifdef INHALER_SERIAL_ON
+  //setup serial connection for debug
+  Serial.begin(115200);
+  while(!Serial);
+  Serial.println(F("Serial Connected"));
+#endif
+  probe(1);
+/*
+ * QUEUE SETUP
+ */
+ q.begin();
+ 
   //test sending IUE
   attachInterrupt(digitalPinToInterrupt(7), setIueTriggered, RISING);
   
@@ -99,24 +110,19 @@ void setup()
    */
   pinMode(LED_BUILTIN, OUTPUT);
 
-#ifdef INHALER_SERIAL_ON
-  //setup serial connection for debug
-  Serial.begin(115200);
-  while(!Serial);
-  Serial.println("Serial Connected");
-#endif
+
 
  /*
   * RTC SETUP
   */
 #ifdef RTC_CONNECTED
   RTC.begin();
-  setSyncProvider(RTC.get);
+  //setSyncProvider(RTC.get);
 #ifdef INHALER_SERIAL_ON
   if(timeStatus() != timeSet)
-    Serial.println("Unable to sync with the RTC");
+    Serial.println(F("Unable to sync with the RTC"));
   else
-    Serial.println("RTC has set the system time");
+    Serial.println(F("RTC has set the system time"));
 #endif
   setRTCSerial();
 #endif
@@ -137,11 +143,12 @@ void sendIUE()
 #ifdef RTC_CONNECTED
   iue.timestamp = getTime()*1000; //multiply by 1000 because the app reqires milliseconds
 #else
-  iue.timestamp = 0x180A1AE1D03;
+  iue_count += 10000;
+  iue.timestamp = 0x180A1AE1D03 + iue_count;
 #endif
 
 #ifdef INHALER_SERIAL_ON
-  Serial.println("Recieved Interrupt");
+  Serial.println(F("Recieved Interrupt"));
   printIUE(iue);
   Serial.println();
 #endif
@@ -157,12 +164,12 @@ void sendIUE()
       bool retVal = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
 #ifdef INHALER_SERIAL_ON
       if(retVal)
-        Serial.println("Indication Sent!");
+        Serial.println(F("Indication Sent!"));
 #endif
     } 
   }
 #ifdef INHALER_SERIAL_ON
-  Serial.println();
+  Serial.println("");
 #endif   
 }
 
@@ -185,7 +192,7 @@ time_t getTime()
   int8_t retVal = RTC.read(tm);
 #ifdef INHALER_SERIAL_ON
   if(retVal != 0)
-    Serial.println("Could not read time from RTC");
+    Serial.println(F("Could not read time from RTC"));
 #endif
   return makeTime(tm);
 }
@@ -199,7 +206,7 @@ void setRTCSerial()
     time_t t;
     tmElements_t tm;
 // check for input to set the RTC, minimum length is 12, i.e. yy,m,d,h,m,s
-    Serial.println("Enter Date and time yy,m,d,h,m,s");
+    Serial.println(F("Enter Date and time yy,m,d,h,m,s"));
     while(!Serial.available());
     if (Serial.available() >= 12) {
         // note that the tmElements_t Year member is an offset from 1970,
@@ -209,6 +216,7 @@ void setRTCSerial()
         if (y >= 100 && y < 1000)
           Serial.println(F("Error: Year must be two digits or four digits!"));
         else {
+
             if (y >= 1000)
                 tm.Year = CalendarYrToTm(y);
             else    // (y < 100)
@@ -224,7 +232,8 @@ void setRTCSerial()
             while (Serial.available() > 0) Serial.read();
         }
     }
-    Serial.println("leaving setRTC");
+    Serial.println(F("leaving setRTC"));
+    Serial.flush();
 #endif
 }
 #endif
