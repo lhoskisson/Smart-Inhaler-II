@@ -1,14 +1,10 @@
 #include <bluefruit.h>
+#include "wearable_data_t.h"
+#include "wearableDataQueue.h"
 
-//#define PIN_SERIAL_ON
+#include "pinDebug.h"
 
-typedef struct{
-  float temperature;            // 4 bytes - little endian
-  float humidity;               // 4 bytes - little endian
-  int32_t  particle_2_5_count;  // 4 bytes - little endian
-  int voc_data;                 // 4 bytes
-  int co2_data;                 // 4 bytes
-} wearable_data_t;
+wearableDataQueue q;
 
 //Pin UUIDs
 #define PIN_SERVICE_UUID                  "25380284e1b6489abbcf97d8f7470aa4"
@@ -37,6 +33,11 @@ void setup()
   Serial.println("Serial Connected");
   Serial.flush();
 #endif
+
+  /*
+   * QUEUE SETUP
+   */
+   q.begin();
 
   /*
    * BLEDIS setup
@@ -74,8 +75,6 @@ void setup()
   /*
    * NON BLE SETUP
    */
-
-
   //creating test data
   testData.temperature = 70.3;
   testData.humidity = 34.3;
@@ -89,8 +88,9 @@ void setup()
 void loop() 
 {
 #ifdef PIN_SERIAL_ON
-  Serial.println("In Loop");
-  Serial.flush();
-  delay(5000);
 #endif
+  wearable_data_t wd = {70.9, 53.1, 12, 124, 23233};
+  q.enqueue(wd);
+  delay(5000);
+  wd = q.dequeue();
 }
