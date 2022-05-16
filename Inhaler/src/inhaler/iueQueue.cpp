@@ -27,9 +27,7 @@ void iueQueue::enqueue(IUE_t iue)
     fs.remove(fileName);
 
   File iueFile = fs.open(fileName, FILE_WRITE);
-  char iue_cstr[IUE_MAX_LENGTH+1]; //+1 for null terminator
-  i_to_cstr(iue.timestamp, iue_cstr, IUE_MAX_LENGTH+1);
-  iueFile.print(iue_cstr);
+  iueFile.write(&iue, sizeof(IUE_t));
   iueFile.close();
   updateTailFile();
 }
@@ -47,19 +45,7 @@ IUE_t iueQueue::dequeue()
     Serial.print(F("opened file with size "));
     Serial.println(iueFile.size());
 #endif
-    for(int i = 0; i < iueFile.size(); i++)
-    {
-      char fileChar;
-      iueFile.read(&fileChar, 1);
-      if(fileChar < '0' || fileChar > '9')
-        continue;
-      iue.timestamp *= 10;
-      iue.timestamp += fileChar - 48;
-#ifdef INHALER_SERIAL_ON
-      Serial.print(F("found "));
-      Serial.print(fileChar);
-#endif
-    }
+    iue.timestamp = iueFile.read(&iue, sizeof(IUE_t));
     iueFile.close();
     fs.remove(fileName);
   }
