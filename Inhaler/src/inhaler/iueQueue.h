@@ -35,11 +35,9 @@ class iueQueue
   Adafruit_SPIFlash flash;
   
   uint16_t head;
-  
   uint16_t tail;
 
   void i_to_cstr(uint64_t n, char* s, const int len);
-
   void updateHeadFile();
   void updateTailFile();
   uint16_t getHeadFromFile();
@@ -47,5 +45,4 @@ class iueQueue
   void initializeHeadTail();
   
 };
-
 #endif
