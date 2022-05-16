@@ -13,9 +13,14 @@
 
 #define IUE_PIN 7
 #define BLE_PIN 6
-
+#define R_LED_PIN 14
+#define G_LED_PIN 15
+#define B_LED_PIN 16
+#define IUE_TIME 5000 //Total nebulization running time during IUE
+#define PRESSURE_DELTA 50 //Pressure difference for IUE; negative is suck, positive is blow
 #define BLE_FAST_TIMEOUT 0
 #define BLE_ADV_LENGTH 60
+
 //#define RTC_CONNECTED
 
 #ifdef RTC_CONNECTED
@@ -55,7 +60,6 @@ void setup()
   while(!Serial);
   Serial.println(F("Serial Connected"));
 #endif
-  probe(1);
 /*
  * QUEUE SETUP
  */
@@ -174,12 +178,35 @@ void sendIUEs()
 #endif   
 }
 
+void batteryState() 
+{
+  int s = (int) lipo.getSOC();
+  if (s >= 70)
+    analogWrite(G_LED_PIN, 255);
+  else if ((s > 30) && (s <70)) 
+  {
+    analogWrite(R_LED_PIN, 70);
+    analogWrite(G_LED_PIN, 30);
+  } 
+  else 
+    analogWrite(R_LED_PIN, 100);
+}
+
 /*
  * IUE interrupt routine
  */
 void setIueTriggered()
 {
   iueTriggered = true;
+}
+
+/*
+ * BLE interrupt routine
+ */
+void setBleTriggered()
+{
+  if(!iueTriggered)
+    bleTriggered = true;
 }
 
 /*
