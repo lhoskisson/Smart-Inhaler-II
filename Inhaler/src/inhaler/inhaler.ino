@@ -12,7 +12,10 @@
 #include "inhalerDebug.h"
 
 #define IUE_PIN 7
-#define BLE_PIN
+#define BLE_PIN 6
+
+#define BLE_FAST_TIMEOUT 0
+#define BLE_ADV_LENGTH 60
 //#define RTC_CONNECTED
 
 #ifdef RTC_CONNECTED
@@ -41,6 +44,7 @@ BLEDis bledis;
 
 //flags
 bool iueTriggered = false;
+bool bleTriggered = false;
 
 void setup() 
 {
@@ -59,6 +63,7 @@ void setup()
  
   //test sending IUE
   attachInterrupt(digitalPinToInterrupt(IUE_PIN), setIueTriggered, RISING);
+  attachInterrupt(digitalPinToInterrupt(BLE_PIN), setBleTriggered, RISING);
   
   /*
    * BLEDIS setup
@@ -96,7 +101,9 @@ void setup()
   Bluefruit.Advertising.addService(inhalerService);
   Bluefruit.Advertising.addAppearance(INHALER_APPEARANCE);
   Bluefruit.Advertising.addName();
-  Bluefruit.Advertising.start();
+  Bluefruit.Advertising.restartOnDisconnect(true);
+  Bluefruit.Advertising.setFastTimeout(BLE_FAST_TIMEOUT);
+  Bluefruit.Advertising.start(BLE_ADV_LENGTH);
 
   /*
    * NON BLE SETUP
@@ -125,42 +132,43 @@ void loop()
 {
   if(iueTriggered)
   {
-    sendIUE();
+#ifdef INHALER_SERIAL_ON
+    Serial.println(F("Recieved Interrupt"));
+    printIUE(iue);
+    Serial.println();
+#endif
+    IUE_t iue;
+#ifdef RTC_CONNECTED
+    iue.timestamp = getTime()*1000; //multiply by 1000 because the app reqires milliseconds
+#else
+    iue.timestamp = 0x180A1AE1D03 + millis();
+#endif
+
+    q.enqueue(iue);
+    sendIUEs();
     iueTriggered = false;
   }
+  if(bleTriggered)
+  {
+    Bluefruit.Advertising.start(BLE_ADV_LENGTH);
+    bleTriggered = false;
+  }
+  if(Bluefruit.connected(Bluefruit.connHandle()) && !q.empty())
+    sendIUEs();
 }
 
-void sendIUE()
+void sendIUEs()
 {
-  IUE_t iue;
-#ifdef RTC_CONNECTED
-  iue.timestamp = getTime()*1000; //multiply by 1000 because the app reqires milliseconds
-#else
-  iue_count += 10000;
-  iue.timestamp = 0x180A1AE1D03 + iue_count;
-#endif
-
-#ifdef INHALER_SERIAL_ON
-  Serial.println(F("Recieved Interrupt"));
-  printIUE(iue);
-  Serial.println();
-#endif
-
-  q.enqueue(iue);
-
-  //if there is a BLE connection, the IUE queue is uploaded
-  if(Bluefruit.connected(Bluefruit.connHandle()))
+  bool indicationSuccessful = true;
+  while(!q.empty() && Bluefruit.connected(Bluefruit.connHandle()) && indicationSuccessful)
   {
-    while(!q.empty())
-    {
-      iue = q.dequeue();
-      bool retVal = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
+    iue = q.dequeue();
+    bool indicationSuccessful = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
 #ifdef INHALER_SERIAL_ON
-      if(retVal)
-        Serial.println(F("Indication Sent!"));
+    if(retVal)
+      Serial.println(F("Indication Sent!"));
 #endif
-    } 
-  }
+  } 
 #ifdef INHALER_SERIAL_ON
   Serial.println("");
 #endif   
