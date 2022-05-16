@@ -23,13 +23,11 @@ void wearableDataQueue::enqueue(wearable_data_t wd)
   printWearableData(wd);
   Serial.println("");
 #endif
-  //noInterrupts();
   if(fs.exists(fileName))
     fs.remove(fileName);
   File wearableDataFile = fs.open(fileName, FILE_WRITE);
-  wearableDataFile.write(&wd, sizeof(wd));
+  wearableDataFile.write(&wd, sizeof(wearable_data_t));
   wearableDataFile.close();
-  //Interrupts();
   updateTailFile();
 }
 
@@ -40,20 +38,14 @@ wearable_data_t wearableDataQueue::dequeue()
   i_to_cstr(head++, fileName, DATA_FILENAME_MAX_LENGTH);
   if(fs.exists(fileName))
   {
-    //noInterrupts();
     File wearableDataFile = fs.open(fileName, FILE_READ);
 #ifdef PIN_SERIAL_ON
     Serial.print(F("opened file with size "));
     Serial.println(wearableDataFile.size());
 #endif
-    wearableDataFile.read(&wd.temperature, sizeof(float));
-    wearableDataFile.read(&wd.humidity, sizeof(float));
-    wearableDataFile.read(&wd.particle_2_5_count, sizeof(uint32_t));
-    wearableDataFile.read(&wd.voc_data, sizeof(uint32_t));
-    wearableDataFile.read(&wd.co2_data, sizeof(uint32_t));
+    wearableDataFile.read(&wd, sizeof(wearable_data_t));
     wearableDataFile.close();
     fs.remove(fileName);
-    //Interrupts();
   }
 #ifdef PIN_SERIAL_ON
   Serial.print(F("dequeued "));
@@ -115,24 +107,20 @@ void wearableDataQueue::updateHeadFile()
   Serial.print(F("updating head file to "));
   Serial.println(head);
 #endif
-  //noInterrupts();
   if(fs.exists(HEAD_FILENAME))
     fs.remove(HEAD_FILENAME);
   File headFile = fs.open(HEAD_FILENAME, FILE_WRITE);
   headFile.print(head);
   headFile.close();
-  //Interrupts();
 }
 
 uint16_t wearableDataQueue::getHeadFromFile()
 {
-  //noInterrupts();
   if(!fs.exists(HEAD_FILENAME))
     return 0;
   File headFile = fs.open(HEAD_FILENAME, FILE_READ);
   uint16_t _head = headFile.parseInt();
   headFile.close();
-  //Interrupts();
 #ifdef PIN_SERIAL_ON
   Serial.print(F("retreiving from head file: "));
   Serial.println(_head);
@@ -146,24 +134,20 @@ void wearableDataQueue::updateTailFile()
   Serial.print(F("updating tail file to "));
   Serial.println(tail);
 #endif
-  //noInterrupts();
   if(fs.exists(TAIL_FILENAME))
     fs.remove(TAIL_FILENAME);
   File tailFile = fs.open(TAIL_FILENAME, FILE_WRITE);
   tailFile.print(tail);
   tailFile.close();
-  //Interrupts();
 }
 
 uint16_t wearableDataQueue::getTailFromFile()
 {
-  //noInterrupts();
   if(!fs.exists(TAIL_FILENAME))
     return 0;
   File tailFile = fs.open(TAIL_FILENAME, FILE_READ);
   uint16_t _tail = tailFile.parseInt();
   tailFile.close();
-  //Interrupts();
 #ifdef PIN_SERIAL_ON
   Serial.print(F("retreiving from tail file: "));
   Serial.println(_tail);

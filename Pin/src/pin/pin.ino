@@ -21,9 +21,6 @@ BLECharacteristic pinDataCharacteristic(pinDataCharacteristicUuid);
 
 BLEDis bledis;
 
-//create test data
-wearable_data_t testData;
-
 void setup() 
 {
 #ifdef PIN_SERIAL_ON
@@ -75,22 +72,8 @@ void setup()
   /*
    * NON BLE SETUP
    */
-  //creating test data
-  testData.temperature = 70.3;
-  testData.humidity = 34.3;
-  testData.particle_2_5_count = 25;
-  testData.voc_data = 0;
-  testData.co2_data = 0;
-
-  pinDataCharacteristic.write(&testData, sizeof(wearable_data_t));
 }
 
 void loop() 
 {
-#ifdef PIN_SERIAL_ON
-#endif
-  wearable_data_t wd = {70.9, 53.1, 12, 124, 23233};
-  q.enqueue(wd);
-  delay(5000);
-  wd = q.dequeue();
 }
