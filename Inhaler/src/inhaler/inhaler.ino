@@ -11,6 +11,8 @@
 
 #include "inhalerDebug.h"
 
+#define IUE_PIN 7
+#define BLE_PIN
 //#define RTC_CONNECTED
 
 #ifdef RTC_CONNECTED
@@ -23,7 +25,6 @@ DS3232RTC RTC;
 #define INHALER_IUE_CHARACTERISTIC_UUID   "d7dc7c5048ce45a49c3e243a5bb75608"
 #define INHALER_APPEARANCE 0x03C0 //BLE Apperance code for human interface device
 
-uint64_t iue_count = 0;
 iueQueue q;
 
 //setup Inhaler UUID classes
@@ -37,9 +38,6 @@ BLECharacteristic inhalerTimeCharacteristic(inhalerTimeCharacteristicUuid);
 BLECharacteristic inhalerIueCharacteristic(inhalerIueCharacteristicUuid);
 
 BLEDis bledis;
-
-//create test IUE
-volatile IUE_t iueTest;
 
 //flags
 bool iueTriggered = false;
@@ -60,7 +58,7 @@ void setup()
  q.begin();
  
   //test sending IUE
-  attachInterrupt(digitalPinToInterrupt(7), setIueTriggered, RISING);
+  attachInterrupt(digitalPinToInterrupt(IUE_PIN), setIueTriggered, RISING);
   
   /*
    * BLEDIS setup
@@ -81,11 +79,6 @@ void setup()
   inhalerIueCharacteristic.setProperties(CHR_PROPS_INDICATE); //has to be set to indicate for app to allow transfer
   inhalerIueCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   inhalerIueCharacteristic.setFixedLen(sizeof(IUE_t));
-
-/*
-  iueTest.timestamp = 0;
-  inhalerIueCharacteristic.indicate(&iueTest, sizeof(IUE_t));
-  */
 
   //initialize ble settings
   Bluefruit.setName("Smart Inhaler");
