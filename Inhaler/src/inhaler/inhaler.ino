@@ -11,20 +11,26 @@
 
 #include "inhalerDebug.h"
 
-#define IUE_PIN 7
-#define BLE_PIN 6
+
+#define IUE_PIN 6
+#define BLE_PIN 5
 #define R_LED_PIN 14
 #define G_LED_PIN 15
 #define B_LED_PIN 16
+#define NEBULIZER_PIN 9
 #define IUE_TIME 5000 //Total nebulization running time during IUE
-#define PRESSURE_DELTA 50 //Pressure difference for IUE; negative is suck, positive is blow
+#define PRESSURE_DELTA -50 //Pressure difference for IUE; negative is suck, positive is blow
 #define BLE_FAST_TIMEOUT 0
 #define BLE_ADV_LENGTH 60
 
-//#define RTC_CONNECTED
-
 #ifdef RTC_CONNECTED
 DS3232RTC RTC;
+#endif
+
+Adafruit_MPRLS mpr;
+
+#ifdef LIPO_CONNECTED
+SFE_MAX1704X lipo(MAX1704X_MAX17048);
 #endif
 
 //Inhaler UUIDs
@@ -32,6 +38,9 @@ DS3232RTC RTC;
 #define INHALER_TIME_CHARACTERISTIC_UUID  "015529f7554c4138a71e40a2dfede10a"
 #define INHALER_IUE_CHARACTERISTIC_UUID   "d7dc7c5048ce45a49c3e243a5bb75608"
 #define INHALER_APPEARANCE 0x03C0 //BLE Apperance code for human interface device
+
+int IUE_Accumulator = 0;
+int Pressure_Ref = 0;
 
 iueQueue q;
 
@@ -53,22 +62,59 @@ bool bleTriggered = false;
 
 void setup() 
 {
-
-#ifdef INHALER_SERIAL_ON
-  //setup serial connection for debug
+  //beginSerial();
+//#ifdef INHALER_SERIAL_ON
   Serial.begin(115200);
   while(!Serial);
-  Serial.println(F("Serial Connected"));
-#endif
-/*
- * QUEUE SETUP
- */
- q.begin();
- 
-  //test sending IUE
+  Serial.println("Serial Connected");
+  Serial.flush();
+//#endif
+ /*
+  * PIN SETUP
+  */
+  pinMode(IUE_PIN, INPUT_PULLUP);
+  pinMode(BLE_PIN, INPUT_PULLUP);
+  pinMode(NEBULIZER_PIN, OUTPUT); digitalWrite(NEBULIZER_PIN, LOW);
+  pinMode(LED_BUILTIN, OUTPUT); 
+  pinMode(R_LED_PIN, OUTPUT);
+  pinMode(G_LED_PIN, OUTPUT); 
+  pinMode(B_LED_PIN, OUTPUT); 
+  resetLEDs();
+
   attachInterrupt(digitalPinToInterrupt(IUE_PIN), setIueTriggered, RISING);
   attachInterrupt(digitalPinToInterrupt(BLE_PIN), setBleTriggered, RISING);
+#ifdef LIPO_CONNECTED
+  while(!lipo.begin()) probe(1);
+#endif
+  while(!mpr.begin()) probe(2);
+  probe(3);
   
+ /*
+  * RTC SETUP
+  */
+#ifdef RTC_CONNECTED
+  RTC.begin();
+  //setSyncProvider(RTC.get);
+#ifdef INHALER_SERIAL_ON
+  if(timeStatus() != timeSet)
+    Serial.println(F("Unable to sync with the RTC"));
+  else
+    Serial.println(F("RTC has set the system time"));
+#endif
+  setRTCSerial();
+#endif
+
+#ifdef LIPO_CONNECTED
+  lipo.setThreshold(30); //set low-battery alert to 30% per proposal specification
+  delay(100);
+#endif
+  Pressure_Ref = (int) mpr.readPressure();
+  
+ /*
+  * QUEUE SETUP
+  */
+  q.begin();
+ 
   /*
    * BLEDIS setup
    */
@@ -116,20 +162,7 @@ void setup()
 
 
 
- /*
-  * RTC SETUP
-  */
-#ifdef RTC_CONNECTED
-  RTC.begin();
-  //setSyncProvider(RTC.get);
-#ifdef INHALER_SERIAL_ON
-  if(timeStatus() != timeSet)
-    Serial.println(F("Unable to sync with the RTC"));
-  else
-    Serial.println(F("RTC has set the system time"));
-#endif
-  setRTCSerial();
-#endif
+
 }
 
 void loop() 
@@ -137,10 +170,49 @@ void loop()
   if(iueTriggered)
   {
 #ifdef INHALER_SERIAL_ON
-    Serial.println(F("Recieved Interrupt"));
-    printIUE(iue);
-    Serial.println();
+    Serial.println(F("Recieved IUE"));
 #endif
+
+
+  resetLEDs();
+  analogWrite(B_LED_PIN, 100);
+  
+#ifdef PRESSURE_SENSOR
+  int treatMillis = 0;
+  IUE_Accumulator = millis();
+  while (treatMillis < IUE_TIME) //
+  {
+    probe(4);
+    int currentPressureDelta = (int) mpr.readPressure() - Pressure_Ref;
+    int currentMillis = millis();
+    if (currentPressureDelta <= PRESSURE_DELTA) //if pressure sensor shows use
+    {
+      digitalWrite(NEBULIZER_PIN, HIGH);
+      int deltaMillis = currentMillis - IUE_Accumulator;
+      if (deltaMillis >= 50)
+      {
+        probe(5);
+        treatMillis += deltaMillis;
+        IUE_Accumulator = currentMillis;
+      }
+    } 
+    else 
+    {
+      probe(6);
+      digitalWrite(NEBULIZER_PIN, LOW);
+      IUE_Accumulator = currentMillis;
+    }
+  }
+
+    
+  digitalWrite(NEBULIZER_PIN, LOW);
+  //resetIUE();
+#else
+  digitalWrite(NEBULIZER_PIN, HIGH);
+  delay(5000);
+  digitalWrite(NEBULIZER_PIN, LOW);
+#endif
+
     IUE_t iue;
 #ifdef RTC_CONNECTED
     iue.timestamp = getTime()*1000; //multiply by 1000 because the app reqires milliseconds
@@ -151,6 +223,7 @@ void loop()
     q.enqueue(iue);
     sendIUEs();
     iueTriggered = false;
+    resetLEDs();
   }
   if(bleTriggered)
   {
@@ -166,10 +239,10 @@ void sendIUEs()
   bool indicationSuccessful = true;
   while(!q.empty() && Bluefruit.connected(Bluefruit.connHandle()) && indicationSuccessful)
   {
-    iue = q.dequeue();
+    IUE_t iue = q.dequeue();
     bool indicationSuccessful = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
 #ifdef INHALER_SERIAL_ON
-    if(retVal)
+    if(indicationSuccessful)
       Serial.println(F("Indication Sent!"));
 #endif
   } 
@@ -180,6 +253,7 @@ void sendIUEs()
 
 void batteryState() 
 {
+#ifdef LIPO_CONNECTED
   int s = (int) lipo.getSOC();
   if (s >= 70)
     analogWrite(G_LED_PIN, 255);
@@ -190,6 +264,14 @@ void batteryState()
   } 
   else 
     analogWrite(R_LED_PIN, 100);
+#endif
+}
+
+void resetLEDs()
+{
+  analogWrite(R_LED_PIN, 0);
+  analogWrite(G_LED_PIN, 0);
+  analogWrite(B_LED_PIN, 0);
 }
 
 /*
