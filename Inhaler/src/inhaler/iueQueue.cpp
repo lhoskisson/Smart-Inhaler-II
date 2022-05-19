@@ -45,7 +45,7 @@ IUE_t iueQueue::dequeue()
     Serial.print(F("opened file with size "));
     Serial.println(iueFile.size());
 #endif
-    iue = iueFile.read(&iue, sizeof(IUE_t));
+    iueFile.read(&iue, sizeof(IUE_t));
     iueFile.close();
     fs.remove(fileName);
   }

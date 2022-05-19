@@ -19,6 +19,7 @@
 #define B_LED_PIN 16
 #define NEBULIZER_PIN 9
 #define IUE_TIME 5000 //Total nebulization running time during IUE
+#define IUE_TIMEOUT 15000
 #define PRESSURE_DELTA -50 //Pressure difference for IUE; negative is suck, positive is blow
 #define BLE_FAST_TIMEOUT 0
 #define BLE_ADV_LENGTH 60
@@ -39,7 +40,6 @@ SFE_MAX1704X lipo(MAX1704X_MAX17048);
 #define INHALER_IUE_CHARACTERISTIC_UUID   "d7dc7c5048ce45a49c3e243a5bb75608"
 #define INHALER_APPEARANCE 0x03C0 //BLE Apperance code for human interface device
 
-int IUE_Accumulator = 0;
 int Pressure_Ref = 0;
 
 iueQueue q;
@@ -179,32 +179,32 @@ void loop()
   
 #ifdef PRESSURE_SENSOR
   int treatMillis = 0;
-  IUE_Accumulator = millis();
+  unsigned long startTime = millis();
+  unsigned long IUE_Accumulator = startTime;
   while (treatMillis < IUE_TIME) //
   {
-    probe(4);
     int currentPressureDelta = (int) mpr.readPressure() - Pressure_Ref;
     int currentMillis = millis();
+    
+    if(currentMillis - startTime > IUE_TIMEOUT)
+      break;
+      
     if (currentPressureDelta <= PRESSURE_DELTA) //if pressure sensor shows use
     {
       digitalWrite(NEBULIZER_PIN, HIGH);
       int deltaMillis = currentMillis - IUE_Accumulator;
       if (deltaMillis >= 50)
       {
-        probe(5);
         treatMillis += deltaMillis;
         IUE_Accumulator = currentMillis;
       }
     } 
     else 
     {
-      probe(6);
       digitalWrite(NEBULIZER_PIN, LOW);
       IUE_Accumulator = currentMillis;
     }
-  }
-
-    
+  }  
   digitalWrite(NEBULIZER_PIN, LOW);
   //resetIUE();
 #else
