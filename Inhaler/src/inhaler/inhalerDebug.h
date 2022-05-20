@@ -2,7 +2,7 @@
 #define INHALER_DEBUG
 
 #define INHALER_SERIAL_ON
-#define PRESSURE_SENSOR
+//#define PRESSURE_SENSOR
 //#define LIPO_CONNECTED
 #define RTC_CONNECTED
 

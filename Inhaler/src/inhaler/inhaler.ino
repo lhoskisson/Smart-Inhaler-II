@@ -1,6 +1,5 @@
 #include <bluefruit.h>
 #include <DS3232RTC.h>
-//#include <Streaming.h>
 #include <SPI.h>
 #include <SdFat.h>
 #include <Adafruit_SPIFlash.h>
@@ -20,6 +19,7 @@
 #define NEBULIZER_PIN 9
 #define IUE_TIME 5000 //Total nebulization running time during IUE
 #define IUE_TIMEOUT 15000
+#define INDICATION_TIMEOUT 5000
 #define PRESSURE_DELTA -50 //Pressure difference for IUE; negative is suck, positive is blow
 #define BLE_FAST_TIMEOUT 0
 #define BLE_ADV_LENGTH 60
@@ -28,7 +28,9 @@
 DS3232RTC RTC;
 #endif
 
+#ifdef PRESSURE_SENSOR
 Adafruit_MPRLS mpr;
+#endif
 
 #ifdef LIPO_CONNECTED
 SFE_MAX1704X lipo(MAX1704X_MAX17048);
@@ -84,10 +86,12 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(IUE_PIN), setIueTriggered, RISING);
   attachInterrupt(digitalPinToInterrupt(BLE_PIN), setBleTriggered, RISING);
 #ifdef LIPO_CONNECTED
-  while(!lipo.begin()) probe(1);
+  while(!lipo.begin());
 #endif
-  while(!mpr.begin()) probe(2);
-  probe(3);
+
+#ifdef PRESSURE_SENSOR
+  while(!mpr.begin());
+#endif
   
  /*
   * RTC SETUP
@@ -108,7 +112,10 @@ void setup()
   lipo.setThreshold(30); //set low-battery alert to 30% per proposal specification
   delay(100);
 #endif
+
+#ifdef PRESSURE_SENSOR
   Pressure_Ref = (int) mpr.readPressure();
+#endif
   
  /*
   * QUEUE SETUP
@@ -159,10 +166,6 @@ void setup()
    * NON BLE SETUP
    */
   pinMode(LED_BUILTIN, OUTPUT);
-
-
-
-
 }
 
 void loop() 
@@ -187,7 +190,12 @@ void loop()
     int currentMillis = millis();
     
     if(currentMillis - startTime > IUE_TIMEOUT)
+    {
+#ifdef INHALER_SERIAL_ON
+      Serial.println("Treatment Phase Timing Out!");
+#endif
       break;
+    }
       
     if (currentPressureDelta <= PRESSURE_DELTA) //if pressure sensor shows use
     {
@@ -231,19 +239,34 @@ void loop()
     bleTriggered = false;
   }
   if(Bluefruit.connected(Bluefruit.connHandle()) && !q.empty())
+  {
+#ifdef INHALER_SERIAL_ON
+    Serial.println("BLE Connected, Sending IUEs");
+#endif
     sendIUEs();
+  }
 }
 
 void sendIUEs()
 {
-  bool indicationSuccessful = true;
-  while(!q.empty() && Bluefruit.connected(Bluefruit.connHandle()) && indicationSuccessful)
+  while(!q.empty() && Bluefruit.connected(Bluefruit.connHandle()) /*&& indicationSuccessful*/)
   {
     IUE_t iue = q.dequeue();
-    bool indicationSuccessful = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
+    bool indicationSuccessful = false;
+    unsigned long startTime = millis();
+    while(!indicationSuccessful && millis() - startTime < INDICATION_TIMEOUT)
+    {
+      indicationSuccessful = inhalerIueCharacteristic.indicate(&iue, sizeof(IUE_t));
 #ifdef INHALER_SERIAL_ON
-    if(indicationSuccessful)
-      Serial.println(F("Indication Sent!"));
+      if(indicationSuccessful)
+        Serial.println(F("Indication Sent!"));
+      else
+        Serial.println(F("Indication not Successful"));
+#endif
+    }
+#ifdef INHALER_SERIAL_ON
+    if(!indicationSuccessful)
+      Serial.println("Indication Timed Out!");
 #endif
   } 
 #ifdef INHALER_SERIAL_ON
@@ -323,10 +346,11 @@ void setRTCSerial()
         // but the RTC wants the last two digits of the calendar year.
         // use the convenience macros from the Time Library to do the conversions.
         int y = Serial.parseInt();
+        probe(1);
         if (y >= 100 && y < 1000)
           Serial.println(F("Error: Year must be two digits or four digits!"));
         else {
-
+            probe(2);
             if (y >= 1000)
                 tm.Year = CalendarYrToTm(y);
             else    // (y < 100)
@@ -337,8 +361,10 @@ void setRTCSerial()
             tm.Minute = Serial.parseInt();
             tm.Second = Serial.parseInt();
             t = makeTime(tm);
+            probe(3);
             RTC.set(t);   // use the time_t value to ensure correct weekday is set
             // dump any extraneous input
+            probe(4);
             while (Serial.available() > 0) Serial.read();
         }
     }
