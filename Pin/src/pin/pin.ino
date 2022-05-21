@@ -1,10 +1,29 @@
 #include <bluefruit.h>
 #include "wearable_data_t.h"
 #include "wearableDataQueue.h"
+#include <SPI.h>
+#include <Wire.h>
+#include <DHT.h>
+#include <DHT_U.h>
+#include <Adafruit_PM25AQI.h>
+#include <Adafruit_SGP30.h>
+#include <Adafruit_PM25AQI.h>
+#include <Adafruit_Sensor.h>
 
 #include "pinDebug.h"
 
 wearableDataQueue q;
+
+Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
+PM25_AQI_Data PMdata; //PM2.5 sensor
+
+
+Adafruit_SGP30 sgp; //VOC SGP30 sensor
+
+//Temperature sensor
+#define DHTPIN 5
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
 
 //Pin UUIDs
 #define PIN_SERVICE_UUID                  "25380284e1b6489abbcf97d8f7470aa4"
@@ -76,4 +95,16 @@ void setup()
 
 void loop() 
 {
+}
+
+wearable_data_t getWearableData
+{
+  wearable_data_t wd;
+  wd.voc_data = sgp.TVOC();
+  wd.co2_data = sgp.CO2();
+  wd.temp = dht.readTemperature();
+  wd.humidity = dht.readHumidity();
+  wd.PM25 = getPM25();
+  wd.PM100 = getPM100();
+  return wd;
 }
