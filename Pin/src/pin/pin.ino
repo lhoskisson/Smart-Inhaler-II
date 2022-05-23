@@ -3,16 +3,35 @@
 #include "wearableDataQueue.h"
 #include <SPI.h>
 #include <Wire.h>
+#include <SdFat.h>
+#include <Adafruit_SPIFlash.h>
 #include <DHT.h>
 #include <DHT_U.h>
 #include <Adafruit_PM25AQI.h>
 #include <Adafruit_SGP30.h>
-#include <Adafruit_PM25AQI.h>
 #include <Adafruit_Sensor.h>
+#include <arduino-timer.h>
 
 #include "pinDebug.h"
 
+#define DATA_COLLECTION_INTERVAL 600000 //10min
+#define SGP30_BASELINE_CALIBRATION_TIME 43200000 //12 hours
+#define SGP30_BASELINE_COLLECTION_INTERVAL 
+#define SGP30_BASELINE_FILENAME "baseline"
+#define PM25_PIN 9
+#define FAN_PIN 11
+
+bool fanStatus = false;
+bool sgp30BaselineCalibrated = false;
+
+//4 timers: fan on, fan off, data collection, and SGP30 baseline recording
+Timer<4> timer;
+
 wearableDataQueue q;
+
+FatFileSystem fs;
+Adafruit_FlashTransport_QSPI flashTransport;
+Adafruit_SPIFlash flash(&flashTransport);
 
 Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
 PM25_AQI_Data PMdata; //PM2.5 sensor
@@ -50,15 +69,53 @@ void setup()
   Serial.flush();
 #endif
 
+  pinMode(FAN_PIN, OUTPUT); //set digital pin 11 as output
+  pinMode(PM25_PIN,OUTPUT); //set pin 9 to be an output output
+  digitalWrite(FAN_PIN, HIGH);
+  digitalWrite(PM25_PIN, HIGH);
+
+  //setupt flash and file system
+  while(!flash.begin());
+  while(!fs.begin(&flash));
+ 
+  timer.every(DATA_COLLECTION_INTERVAL, recordWearableData);
+  timer.every(SGP30_BASELINE_COLLECTION_INTERVAL, recordSgp30Baseline);
+  
+#ifdef LIPO_CONNECTED
+  lipo.quickStart();
+  lipo.setThreshold(10);
+#endif
+
+#ifdef TEMPERATURE_SENSOR_CONNECTED
+  dht.begin();
+#endif
+
+#ifdef VOC_SENSOR_CONNECTED
+  sgp.begin();
+
+  //attempt to get stored baseline
+  uint16_t eco2_base;
+  uint16_t tvoc_base;
+  if(readSgp30Baseline(&eco2_base, &tvoc_base))
+  {
+    sgp.setIAQBaseline(eco2_base, tvoc_base);
+    sgp30BaselineCalibrated = true;
+  }
+#endif
+
+#ifdef PM_SENSOR_CONNECTED
+  aqi.begin_I2C();
+#endif
+  
   /*
    * QUEUE SETUP
    */
-   q.begin();
+  q.begin();
 
   /*
    * BLEDIS setup
    */
-   bledis.setModel("Bluefruit Feather52");
+  bledis.setModel("Bluefruit Feather52");
   
   /*
    * PIN BLE SETUP
@@ -95,16 +152,61 @@ void setup()
 
 void loop() 
 {
+  timer.tick();
 }
 
 wearable_data_t getWearableData
 {
   wearable_data_t wd;
+#ifdef VOC_SENSOR_CONNECTED
   wd.voc_data = sgp.TVOC();
   wd.co2_data = sgp.CO2();
-  wd.temp = dht.readTemperature();
+#endif
+
+#ifdef TEMPERATURE_SENSOR_CONNECTED
+  wd.temp = dht.readTemperature(true);
   wd.humidity = dht.readHumidity();
-  wd.PM25 = getPM25();
-  wd.PM100 = getPM100();
+#endif
+
+#ifdef PM_SENSOR_CONNECTED
+  aqi.read(&pmData);
+  wd.PM25 = pmData.pm25_standard;
+  wd.PM100 = pmData.pm100_standard);
+#endif
   return wd;
+}
+
+void recordSgp30Baseline()
+{
+  if(!sgp30BaselineCalibrated && millis() < SGP30_BASELINE_CALIBRATION_TIME)
+    return;
+    
+  uint16_t eco2_base = 0;
+  uint16_t tvoc_base = 0;
+  sgp.getIAQBaseline(&eco2_base, &tvoc_base);
+  if(fs.exists(SGP30_BASELINE_FILENAME))
+    fs.remove(SGP30_BASELINE_FILENAME);
+  File baselineFile = fs.open(SGP30_BASELINE_FILENAME, FILE_WRITE);
+  baselineFile.write(&eco2_base, sizeof(uint16_t));
+  baselineFile.write(&tvoc_base, sizeof(uint16_t));
+  baselineFile.close();
+}
+
+bool readSgp30Baseline(uint16_t* eco2_base, uint16_t* tvoc_base)
+{
+  if(!fs.exists(SGP30_BASELINE_FILENAME))
+    return false;
+
+  File baselineFile = fs.open(SGP30_BASELINE_FILENAME, FILE_READ);
+  
+  if(baselineFile.size() != (2*sizeof(uint16_t)))
+  {
+    baselineFile.close();
+    return false;
+  }
+
+  baselineFile.read(eco2_base, sizeof(uint16_t));
+  baselineFile.read(tvoc_base, sizeof(uint16_t));
+  baselineFile.close();
+  return true;
 }
