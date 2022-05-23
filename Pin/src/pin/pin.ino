@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <SdFat.h>
 #include <Adafruit_SPIFlash.h>
+#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>  // Fuel gauge
 #include <DHT.h>
 #include <DHT_U.h>
 #include <Adafruit_PM25AQI.h>
@@ -16,12 +17,14 @@
 
 #define DATA_COLLECTION_INTERVAL 600000 //10min
 #define SGP30_BASELINE_CALIBRATION_TIME 43200000 //12 hours
-#define SGP30_BASELINE_COLLECTION_INTERVAL 
+#define SGP30_BASELINE_COLLECTION_INTERVAL 3600000 //1 hour
 #define SGP30_BASELINE_FILENAME "baseline"
+#define FAN_ON_INTERVAL 30000 //30 seconds
+#define FAN_ON_TIME 10000 //10 seconds
+#define FAN_OFF_INTERVAL (FAN_ON_INTERVAL+FAN_ON_TIME)
 #define PM25_PIN 9
 #define FAN_PIN 11
 
-bool fanStatus = false;
 bool sgp30BaselineCalibrated = false;
 
 //4 timers: fan on, fan off, data collection, and SGP30 baseline recording
@@ -33,8 +36,12 @@ FatFileSystem fs;
 Adafruit_FlashTransport_QSPI flashTransport;
 Adafruit_SPIFlash flash(&flashTransport);
 
+#ifdef LIPO_CONNECTED
+SFE_MAX1704X lipo(MAX1704X_MAX17048);
+#endif
+
 Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
-PM25_AQI_Data PMdata; //PM2.5 sensor
+PM25_AQI_Data pmData; //PM2.5 sensor
 
 
 Adafruit_SGP30 sgp; //VOC SGP30 sensor
@@ -79,6 +86,8 @@ void setup()
   while(!fs.begin(&flash));
  
   timer.every(DATA_COLLECTION_INTERVAL, recordWearableData);
+  timer.every(FAN_ON_INTERVAL, fanOn);
+  timer.every(FAN_OFF_INTERVAL, fanOff);
   timer.every(SGP30_BASELINE_COLLECTION_INTERVAL, recordSgp30Baseline);
   
 #ifdef LIPO_CONNECTED
@@ -155,31 +164,37 @@ void loop()
   timer.tick();
 }
 
-wearable_data_t getWearableData
+wearable_data_t getWearableData()
 {
   wearable_data_t wd;
 #ifdef VOC_SENSOR_CONNECTED
-  wd.voc_data = sgp.TVOC();
-  wd.co2_data = sgp.CO2();
+  wd.voc_data = sgp.TVOC;
+  wd.co2_data = sgp.eCO2;
 #endif
 
 #ifdef TEMPERATURE_SENSOR_CONNECTED
-  wd.temp = dht.readTemperature(true);
+  wd.temperature = dht.readTemperature(true);
   wd.humidity = dht.readHumidity();
 #endif
 
 #ifdef PM_SENSOR_CONNECTED
   aqi.read(&pmData);
-  wd.PM25 = pmData.pm25_standard;
-  wd.PM100 = pmData.pm100_standard);
+  wd.particle_2_5_count = pmData.pm25_standard;
+  //wd.PM100 = pmData.pm100_standard);
 #endif
   return wd;
 }
 
-void recordSgp30Baseline()
+bool recordWearableData(void*)
+{
+  q.enqueue(getWearableData());
+  return true;
+}
+
+bool recordSgp30Baseline(void*)
 {
   if(!sgp30BaselineCalibrated && millis() < SGP30_BASELINE_CALIBRATION_TIME)
-    return;
+    return true;
     
   uint16_t eco2_base = 0;
   uint16_t tvoc_base = 0;
@@ -190,6 +205,7 @@ void recordSgp30Baseline()
   baselineFile.write(&eco2_base, sizeof(uint16_t));
   baselineFile.write(&tvoc_base, sizeof(uint16_t));
   baselineFile.close();
+  return true;
 }
 
 bool readSgp30Baseline(uint16_t* eco2_base, uint16_t* tvoc_base)
@@ -208,5 +224,19 @@ bool readSgp30Baseline(uint16_t* eco2_base, uint16_t* tvoc_base)
   baselineFile.read(eco2_base, sizeof(uint16_t));
   baselineFile.read(tvoc_base, sizeof(uint16_t));
   baselineFile.close();
+  return true;
+}
+
+bool fanOn(void*)
+{
+  digitalWrite(PM25_PIN, HIGH);
+  digitalWrite(FAN_PIN, HIGH);
+  return true;
+}
+
+bool fanOff(void*)
+{
+  digitalWrite(PM25_PIN, LOW);
+  digitalWrite(FAN_PIN, LOW);
   return true;
 }
