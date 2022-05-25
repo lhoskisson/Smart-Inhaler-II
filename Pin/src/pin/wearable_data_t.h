@@ -14,15 +14,15 @@ typedef struct{
 static void printWearableData(wearable_data_t wd)
 {
 #ifdef PIN_SERIAL_ON
-  Serial.print("Wearable Data: ");
+  Serial.print("Wearable Data: T:");
   Serial.print(wd.temperature);
-  Serial.print(", ");
+  Serial.print(", H:");
   Serial.print(wd.humidity);
-  Serial.print(", ");
+  Serial.print(", PM2.5:");
   Serial.print(wd.particle_2_5_count);
-  Serial.print(", ");
+  Serial.print(", VOC:");
   Serial.print(wd.voc_data);
-  Serial.print(", ");
+  Serial.print(", CO2:");
   Serial.println(wd.co2_data);
   Serial.flush();
   #endif

@@ -15,7 +15,7 @@
 
 #include "pinDebug.h"
 
-#define DATA_COLLECTION_INTERVAL 600000 //10min
+#define DATA_COLLECTION_INTERVAL 36000000 //10min
 #define SGP30_BASELINE_CALIBRATION_TIME 43200000 //12 hours
 #define SGP30_BASELINE_COLLECTION_INTERVAL 3600000 //1 hour
 #define SGP30_BASELINE_FILENAME "baseline"
@@ -43,8 +43,9 @@ SFE_MAX1704X lipo(MAX1704X_MAX17048);
 Adafruit_PM25AQI aqi = Adafruit_PM25AQI();
 PM25_AQI_Data pmData; //PM2.5 sensor
 
-
+#ifdef VOC_SENSOR_CONNECTED
 Adafruit_SGP30 sgp; //VOC SGP30 sensor
+#endif
 
 //Temperature sensor
 #define DHTPIN 5
@@ -68,6 +69,7 @@ BLEDis bledis;
 
 void setup() 
 {
+
 #ifdef PIN_SERIAL_ON
   //setup serial connection for debug
   Serial.begin(115200);
@@ -78,12 +80,19 @@ void setup()
 
   pinMode(FAN_PIN, OUTPUT); //set digital pin 11 as output
   pinMode(PM25_PIN,OUTPUT); //set pin 9 to be an output output
-  digitalWrite(FAN_PIN, HIGH);
+  digitalWrite(FAN_PIN, LOW);
   digitalWrite(PM25_PIN, HIGH);
-
+  
+  fanOff(NULL);
+  
   //setupt flash and file system
   while(!flash.begin());
   while(!fs.begin(&flash));
+
+  /*
+   * QUEUE SETUP
+   */
+  q.begin();
  
   timer.every(DATA_COLLECTION_INTERVAL, recordWearableData);
   timer.every(FAN_ON_INTERVAL, fanOn);
@@ -101,7 +110,6 @@ void setup()
 
 #ifdef VOC_SENSOR_CONNECTED
   sgp.begin();
-
   //attempt to get stored baseline
   uint16_t eco2_base;
   uint16_t tvoc_base;
@@ -116,11 +124,6 @@ void setup()
   aqi.begin_I2C();
 #endif
   
-  /*
-   * QUEUE SETUP
-   */
-  q.begin();
-
   /*
    * BLEDIS setup
    */
@@ -162,25 +165,48 @@ void setup()
 void loop() 
 {
   timer.tick();
+
+
+
+#ifdef LIPO_CONNECTED
+#ifdef PIN_SERIAL_ON
+  voltage = lipo.getVoltage();
+  soc = lipo.getSOC();
+  alert = lipo.getAlert();
+  //Print out battery satus
+  //Serial.print("voltage"); Serial.print(voltage);Serial.println();
+  //Serial.print("state of charge"); Serial.print(soc);Serial.println();
+  //Serial.print("alert"); Serial.print(alert);Serial.println();
+#endif
+#endif
 }
 
 wearable_data_t getWearableData()
 {
   wearable_data_t wd;
-#ifdef VOC_SENSOR_CONNECTED
-  wd.voc_data = sgp.TVOC;
-  wd.co2_data = sgp.eCO2;
-#endif
-
 #ifdef TEMPERATURE_SENSOR_CONNECTED
   wd.temperature = dht.readTemperature(true);
   wd.humidity = dht.readHumidity();
+#endif
+
+  //callibrate SGP30 based on temperature and humidity
+  sgp.setHumidity(getAbsoluteHumidity(wd.temperature,wd.humidity));
+
+#ifdef VOC_SENSOR_CONNECTED
+  sgp.IAQmeasure();
+  wd.voc_data = sgp.TVOC;
+  wd.co2_data = sgp.eCO2;
 #endif
 
 #ifdef PM_SENSOR_CONNECTED
   aqi.read(&pmData);
   wd.particle_2_5_count = pmData.pm25_standard;
   //wd.PM100 = pmData.pm100_standard);
+#endif
+
+#ifdef PIN_SERIAL_ON
+  Serial.println("In getWearableData");
+  printWearableData(wd);
 #endif
   return wd;
 }
@@ -229,14 +255,31 @@ bool readSgp30Baseline(uint16_t* eco2_base, uint16_t* tvoc_base)
 
 bool fanOn(void*)
 {
-  digitalWrite(PM25_PIN, HIGH);
+#ifdef PIN_SERIAL_ON
+  Serial.println("Turning Fans on");
+#endif
+  //digitalWrite(PM25_PIN, HIGH);
   digitalWrite(FAN_PIN, HIGH);
+#ifdef PM_SENSOR_CONNECTED
+  aqi.begin_I2C();
+#endif
   return true;
 }
 
 bool fanOff(void*)
 {
-  digitalWrite(PM25_PIN, LOW);
+#ifdef PIN_SERIAL_ON
+  Serial.println("Turning Fans off");
+#endif
+  //digitalWrite(PM25_PIN, LOW);
   digitalWrite(FAN_PIN, LOW);
   return true;
+}
+
+uint32_t getAbsoluteHumidity(float temperature, float humidity)
+{
+    // approximation formula from Sensirion SGP30 Driver Integration chapter 3.15
+    const float absoluteHumidity = 216.7f * ((humidity / 100.0f) * 6.112f * exp((17.62f * temperature) / (243.12f + temperature)) / (273.15f + temperature)); // [g/m^3]
+    const uint32_t absoluteHumidityScaled = static_cast<uint32_t>(1000.0f * absoluteHumidity); // [mg/m^3]
+    return absoluteHumidityScaled;
 }
