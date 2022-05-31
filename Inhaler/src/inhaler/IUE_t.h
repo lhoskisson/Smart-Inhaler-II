@@ -13,8 +13,9 @@ typedef struct{
 #ifdef INHALER_SERIAL_ON
 static void printIUE(IUE_t iue)
 {
- int8_t* iue_ptr = (int8_t*) &iue;
-  Serial.print(F("IUE: "));
+  iue.timestamp /= 1000; //convert back to seconds
+  int8_t* iue_ptr = (int8_t*) &iue;
+  Serial.print(F("IUE (UTC): "));
   Serial.print(ctime((const time_t*) &iue.timestamp));
   Serial.flush();
   /*

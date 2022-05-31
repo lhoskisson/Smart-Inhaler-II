@@ -13,16 +13,16 @@
 
 #define IUE_PIN 6
 #define BLE_PIN 5
-#define R_LED_PIN 14
+#define R_LED_PIN 16
 #define G_LED_PIN 15
-#define B_LED_PIN 16
+#define B_LED_PIN 14
 #define NEBULIZER_PIN 9
 #define IUE_TIME 5000 //Total nebulization running time during IUE
 #define IUE_TIMEOUT 15000
 #define INDICATION_TIMEOUT 5000
 #define PRESSURE_DELTA -50 //Pressure difference for IUE; negative is suck, positive is blow
-#define BLE_FAST_TIMEOUT 0
-#define BLE_ADV_LENGTH 60
+#define BLE_FAST_TIMEOUT 30 //amount of time advertising in fast mode, set to 0 for continuous
+#define BLE_ADV_LENGTH 60 //amount of time advertising, set to 0 for continuous
 
 #ifdef RTC_CONNECTED
 DS3232RTC RTC;
@@ -64,7 +64,6 @@ bool bleTriggered = false;
 
 void setup() 
 {
-  //beginSerial();
 //#ifdef INHALER_SERIAL_ON
   Serial.begin(115200);
   while(!Serial);
@@ -76,7 +75,8 @@ void setup()
   */
   pinMode(IUE_PIN, INPUT_PULLUP);
   pinMode(BLE_PIN, INPUT_PULLUP);
-  pinMode(NEBULIZER_PIN, OUTPUT); digitalWrite(NEBULIZER_PIN, LOW);
+  pinMode(NEBULIZER_PIN, OUTPUT); 
+  digitalWrite(NEBULIZER_PIN, LOW);
   pinMode(LED_BUILTIN, OUTPUT); 
   pinMode(R_LED_PIN, OUTPUT);
   pinMode(G_LED_PIN, OUTPUT); 
@@ -158,7 +158,7 @@ void setup()
   Bluefruit.Advertising.addService(inhalerService);
   Bluefruit.Advertising.addAppearance(INHALER_APPEARANCE);
   Bluefruit.Advertising.addName();
-  Bluefruit.Advertising.restartOnDisconnect(true);
+  Bluefruit.Advertising.restartOnDisconnect(false);
   Bluefruit.Advertising.setFastTimeout(BLE_FAST_TIMEOUT);
   Bluefruit.Advertising.start(BLE_ADV_LENGTH);
 
@@ -235,6 +235,9 @@ void loop()
   }
   if(bleTriggered)
   {
+#ifdef INHALER_SERIAL_ON
+    Serial.println("BLE Button Pressed");
+#endif
     Bluefruit.Advertising.start(BLE_ADV_LENGTH);
     bleTriggered = false;
   }
@@ -339,18 +342,16 @@ void setRTCSerial()
     time_t t;
     tmElements_t tm;
 // check for input to set the RTC, minimum length is 12, i.e. yy,m,d,h,m,s
-    Serial.println(F("Enter Date and time yy,m,d,h,m,s"));
+    Serial.println(F("Enter UTC Date and time yy,m,d,h,m,s"));
     while(!Serial.available());
     if (Serial.available() >= 12) {
         // note that the tmElements_t Year member is an offset from 1970,
         // but the RTC wants the last two digits of the calendar year.
         // use the convenience macros from the Time Library to do the conversions.
         int y = Serial.parseInt();
-        probe(1);
         if (y >= 100 && y < 1000)
           Serial.println(F("Error: Year must be two digits or four digits!"));
         else {
-            probe(2);
             if (y >= 1000)
                 tm.Year = CalendarYrToTm(y);
             else    // (y < 100)
@@ -361,10 +362,8 @@ void setRTCSerial()
             tm.Minute = Serial.parseInt();
             tm.Second = Serial.parseInt();
             t = makeTime(tm);
-            probe(3);
             RTC.set(t);   // use the time_t value to ensure correct weekday is set
             // dump any extraneous input
-            probe(4);
             while (Serial.available() > 0) Serial.read();
         }
     }
