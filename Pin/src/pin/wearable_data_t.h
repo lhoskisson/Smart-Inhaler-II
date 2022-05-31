@@ -7,6 +7,7 @@ typedef struct{
   float temperature;            // 4 bytes - little endian
   float humidity;               // 4 bytes - little endian
   uint32_t  particle_2_5_count; // 4 bytes - little endian
+  uint32_t  particle_10_count;  // 4 bytes
   uint32_t voc_data;            // 4 bytes
   uint32_t co2_data;            // 4 bytes
 } wearable_data_t;
@@ -20,6 +21,8 @@ static void printWearableData(wearable_data_t wd)
   Serial.print(wd.humidity);
   Serial.print(", PM2.5:");
   Serial.print(wd.particle_2_5_count);
+  Serial.print(", PM10:");
+  Serial.print(wd.particle_10_count);
   Serial.print(", VOC:");
   Serial.print(wd.voc_data);
   Serial.print(", CO2:");

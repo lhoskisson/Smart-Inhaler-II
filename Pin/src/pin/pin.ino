@@ -15,7 +15,7 @@
 
 #include "pinDebug.h"
 
-#define DATA_COLLECTION_INTERVAL 36000000 //10min
+#define DATA_COLLECTION_INTERVAL 10000//600000 //10min
 #define SGP30_BASELINE_CALIBRATION_TIME 43200000 //12 hours
 #define SGP30_BASELINE_COLLECTION_INTERVAL 3600000 //1 hour
 #define SGP30_BASELINE_FILENAME "baseline"
@@ -115,6 +115,13 @@ void setup()
   uint16_t tvoc_base;
   if(readSgp30Baseline(&eco2_base, &tvoc_base))
   {
+#ifdef PIN_SERIAL_ON
+    Serial.println("Read SPG30 Baseline");
+    Serial.print("eCO2 Baseline: ");
+    Serial.println(eco2_base);
+    Serial.print("TOVC Baseline ");
+    Serial.println(tvoc_base);
+#endif
     sgp.setIAQBaseline(eco2_base, tvoc_base);
     sgp30BaselineCalibrated = true;
   }
@@ -185,7 +192,7 @@ wearable_data_t getWearableData()
 {
   wearable_data_t wd;
 #ifdef TEMPERATURE_SENSOR_CONNECTED
-  wd.temperature = dht.readTemperature(true);
+  wd.temperature = dht.readTemperature();
   wd.humidity = dht.readHumidity();
 #endif
 
@@ -201,7 +208,7 @@ wearable_data_t getWearableData()
 #ifdef PM_SENSOR_CONNECTED
   aqi.read(&pmData);
   wd.particle_2_5_count = pmData.pm25_standard;
-  //wd.PM100 = pmData.pm100_standard);
+  wd.particle_10_count = pmData.pm10_standard;
 #endif
 
 #ifdef PIN_SERIAL_ON
@@ -213,7 +220,9 @@ wearable_data_t getWearableData()
 
 bool recordWearableData(void*)
 {
-  q.enqueue(getWearableData());
+  wearable_data_t currentData = getWearableData();
+  pinDataCharacteristic.write(&currentData, sizeof(wearable_data_t)); //todo: remove this when queue upload has been implemented on app
+  q.enqueue(currentData);
   return true;
 }
 
@@ -236,6 +245,7 @@ bool recordSgp30Baseline(void*)
 
 bool readSgp30Baseline(uint16_t* eco2_base, uint16_t* tvoc_base)
 {
+
   if(!fs.exists(SGP30_BASELINE_FILENAME))
     return false;
 
