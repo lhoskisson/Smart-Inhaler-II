@@ -10,7 +10,7 @@
 #include <DHT_U.h>
 #include <Adafruit_PM25AQI.h>
 #include <Adafruit_SGP30.h>
-#include <Adafruit_Sensor.h>
+//#include <Adafruit_Sensor.h>
 #include <arduino-timer.h>
 
 #include "pinDebug.h"
@@ -19,6 +19,7 @@
 #define SGP30_BASELINE_CALIBRATION_TIME 43200000 //12 hours
 #define SGP30_BASELINE_COLLECTION_INTERVAL 3600000 //1 hour
 #define SGP30_BASELINE_FILENAME "baseline"
+#define INDICATION_TIMEOUT 5000
 #define FAN_ON_INTERVAL 30000 //30 seconds
 #define FAN_ON_TIME 10000 //10 seconds
 #define FAN_OFF_INTERVAL (FAN_ON_INTERVAL+FAN_ON_TIME)
@@ -139,7 +140,8 @@ void setup()
   /*
    * PIN BLE SETUP
    */
-  pinDataCharacteristic.setProperties(CHR_PROPS_READ);
+  //pinDataCharacteristic.setProperties(CHR_PROPS_READ);
+  pinDataCharacteristic.setProperties(CHR_PROPS_INDICATE);
   pinDataCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   pinDataCharacteristic.setFixedLen(sizeof(wearable_data_t));
   
@@ -173,18 +175,51 @@ void loop()
 {
   timer.tick();
 
-
+  if (Bluefruit.connected(Bluefruit.connHandle()) && !q.empty())
+  {
+#ifdef PIN_SERIAL_ON
+    Serial.println("BLE Connected, Sending Wearable Data");
+#endif
+    sendWearableData();
+  }
 
 #ifdef LIPO_CONNECTED
 #ifdef PIN_SERIAL_ON
-  voltage = lipo.getVoltage();
-  soc = lipo.getSOC();
-  alert = lipo.getAlert();
+ int voltage = lipo.getVoltage();
+ int soc = lipo.getSOC();
+ int alert = lipo.getAlert();
   //Print out battery satus
   //Serial.print("voltage"); Serial.print(voltage);Serial.println();
   //Serial.print("state of charge"); Serial.print(soc);Serial.println();
   //Serial.print("alert"); Serial.print(alert);Serial.println();
 #endif
+#endif
+}
+
+void sendWearableData()
+{
+  while (!q.empty() && Bluefruit.connected(Bluefruit.connHandle()))
+  {
+    wearable_data_t wd = q.dequeue();
+    bool indicationSuccessful = false;
+    unsigned long startTime = millis();
+    while (!indicationSuccessful && millis() - startTime < INDICATION_TIMEOUT)
+    {
+      indicationSuccessful = pinDataCharacteristic.indicate(&wd, sizeof(wearable_data_t));
+#ifdef PIN_SERIAL_ON
+      if (indicationSuccessful)
+        Serial.println(F("Indication Sent!"));
+      else
+        Serial.println(F("Indication not Successful"));
+#endif
+    }
+#ifdef PIN_SERIAL_ON
+    if (!indicationSuccessful)
+      Serial.println("Indication Timed Out!");
+#endif
+  }
+#ifdef PIN_SERIAL_ON
+  Serial.println("");
 #endif
 }
 

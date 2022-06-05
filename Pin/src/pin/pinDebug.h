@@ -1,7 +1,7 @@
 #ifndef PIN_DEBUG
 #define PIN_DEBUG
 
-//#define PIN_SERIAL_ON
+#define PIN_SERIAL_ON
 //#define LIPO_CONNECTED
 #define TEMPERATURE_SENSOR_CONNECTED
 #define VOC_SENSOR_CONNECTED
