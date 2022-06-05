@@ -4,6 +4,7 @@
 #include <SdFat.h>
 #include <Adafruit_SPIFlash.h>
 #include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>  // Fuel gauge
+#include <Wire.h>
 #include "Adafruit_MPRLS.h" //pressure sensor
 #include <arduino-timer.h>
 #include "IUE_t.h"
@@ -102,9 +103,10 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(IUE_PIN), setIueTriggered, RISING);
   attachInterrupt(digitalPinToInterrupt(BLE_PIN), setBleTriggered, RISING);
+
+  Wire.begin(); //Initialize I2C
   
 #ifdef LIPO_CONNECTED
-  //lipo.enableDebugging();
   while (!lipo.begin());
 #endif
 
