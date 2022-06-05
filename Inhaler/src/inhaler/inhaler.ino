@@ -19,6 +19,7 @@
 #define B_LED_PIN 14
 #define NEBULIZER_PIN 9
 #define BLE_LED_INDICATION_TIME 5000
+#define BATTERY_LED_INDICATION_TIME 5000
 #define IUE_TIME 5000 //Total nebulization running time during IUE
 #define IUE_TIMEOUT 15000
 #define INDICATION_TIMEOUT 5000
@@ -56,6 +57,7 @@ int bleLedToggleCount = 0;
 
 iueQueue q;
 
+//TODO: get timer to work with RTC
 Timer<4> timer; //up to four timers at once
 uintptr_t bleBlinkTask;
 uintptr_t endBleBlinkTask;
@@ -100,7 +102,9 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(IUE_PIN), setIueTriggered, RISING);
   attachInterrupt(digitalPinToInterrupt(BLE_PIN), setBleTriggered, RISING);
+  
 #ifdef LIPO_CONNECTED
+  //lipo.enableDebugging();
   while (!lipo.begin());
 #endif
 
@@ -119,8 +123,8 @@ void setup()
     Serial.println(F("Unable to sync with the RTC"));
   else
     Serial.println(F("RTC has set the system time"));
+  //setRTCSerial();
 #endif
-  setRTCSerial();
 #endif
 
 #ifdef LIPO_CONNECTED
@@ -198,10 +202,19 @@ void loop()
   }
   if (bleTriggered)
   {
+    if(iueTriggered)
+      loop();
 #ifdef INHALER_SERIAL_ON
     Serial.println("BLE Button Pressed");
 #endif
-    startBleAdvertising();
+    if(Bluefruit.connected(Bluefruit.connHandle()))
+    {
+      resetLEDs(NULL);
+      batteryState();
+      timer.in(BATTERY_LED_INDICATION_TIME, resetLEDs);
+    }
+    else
+      startBleAdvertising();
     bleTriggered = false;
   }
 }
@@ -211,9 +224,11 @@ void handleIUE()
 #ifdef INHALER_SERIAL_ON
   Serial.println(F("Recieved IUE"));
 #endif
-
+  timer.cancel(bleBlinkTask);
+  timer.cancel(endBleBlinkTask);
   resetLEDs(NULL);
   batteryState();
+  
   bool nebulizerActivated = false;
 
 #ifdef PRESSURE_SENSOR
@@ -235,6 +250,9 @@ void handleIUE()
 
     if (currentPressureDelta <= PRESSURE_DELTA) //if pressure sensor shows use
     {
+#ifdef INHALER_SERIAL_ON
+      Serial.println("Pressure Sensor Activated");
+#endif
       digitalWrite(NEBULIZER_PIN, HIGH);
       nebulizerActivated = true;
       int deltaMillis = currentMillis - IUE_Accumulator;
@@ -256,12 +274,11 @@ void handleIUE()
   delay(5000);
   digitalWrite(NEBULIZER_PIN, LOW);
 #endif
-
+  resetLEDs(NULL);
   if (nebulizerActivated)
   {
-    resetLEDs(NULL);
-    analogWrite(B_LED_PIN, 100);
-    timer.in(BLE_LED_INDICATION_TIME, resetLEDs);
+    turnOnBleLed();
+    timer.in(BLE_LED_INDICATION_TIME, turnOffBleLed);
     IUE_t iue;
 #ifdef RTC_CONNECTED
     iue.timestamp = getTime() * 1000; //multiply by 1000 because the app reqires milliseconds
@@ -271,8 +288,6 @@ void handleIUE()
     q.enqueue(iue);
     sendIUEs();
   }
-  else
-    resetLEDs(NULL);
 }
 
 void sendIUEs()

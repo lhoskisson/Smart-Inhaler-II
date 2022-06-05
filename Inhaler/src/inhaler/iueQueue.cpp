@@ -61,6 +61,7 @@ IUE_t iueQueue::dequeue()
     tail = 0;
   }
   updateHeadFile();
+  updateTailFile();
   return iue;
 }
 
