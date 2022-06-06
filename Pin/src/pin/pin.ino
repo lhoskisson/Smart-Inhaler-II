@@ -140,13 +140,13 @@ void setup()
   /*
    * PIN BLE SETUP
    */
-  //pinDataCharacteristic.setProperties(CHR_PROPS_READ);
-  pinDataCharacteristic.setProperties(CHR_PROPS_INDICATE);
+  pinDataCharacteristic.setProperties(CHR_PROPS_READ | CHR_PROPS_INDICATE);
+  //pinDataCharacteristic.setProperties(CHR_PROPS_INDICATE);
   pinDataCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   pinDataCharacteristic.setFixedLen(sizeof(wearable_data_t));
   
   //initialize ble settings
-  Bluefruit.setName("Smart Inhaler");
+  Bluefruit.setName("Smart Pin");
   Bluefruit.begin();
 
   bledis.begin();
@@ -209,8 +209,6 @@ void sendWearableData()
 #ifdef PIN_SERIAL_ON
       if (indicationSuccessful)
         Serial.println(F("Indication Sent!"));
-      else
-        Serial.println(F("Indication not Successful"));
 #endif
     }
 #ifdef PIN_SERIAL_ON
