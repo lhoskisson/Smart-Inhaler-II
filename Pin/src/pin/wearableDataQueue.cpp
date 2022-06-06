@@ -33,7 +33,7 @@ void wearableDataQueue::enqueue(wearable_data_t wd)
 
 wearable_data_t wearableDataQueue::dequeue()
 {
-  wearable_data_t wd = {0, 0, 0, 0, 0};
+  wearable_data_t wd = {0, 0, 0, 0, 0, 0};
   char fileName[DATA_FILENAME_MAX_LENGTH];
   i_to_cstr(head++, fileName, DATA_FILENAME_MAX_LENGTH);
   if(fs.exists(fileName))
@@ -59,6 +59,7 @@ wearable_data_t wearableDataQueue::dequeue()
     tail = 0;
   }
   updateHeadFile();
+  updateTailFile();
   return wd;
 }
 
