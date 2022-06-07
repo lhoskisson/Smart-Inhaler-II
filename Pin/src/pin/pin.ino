@@ -141,7 +141,6 @@ void setup()
    * PIN BLE SETUP
    */
   pinDataCharacteristic.setProperties(CHR_PROPS_READ | CHR_PROPS_INDICATE);
-  //pinDataCharacteristic.setProperties(CHR_PROPS_INDICATE);
   pinDataCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
   pinDataCharacteristic.setFixedLen(sizeof(wearable_data_t));
   
@@ -201,6 +200,7 @@ void sendWearableData()
   while (!q.empty() && Bluefruit.connected(Bluefruit.connHandle()))
   {
     wearable_data_t wd = q.dequeue();
+
     bool indicationSuccessful = false;
     unsigned long startTime = millis();
     while (!indicationSuccessful && millis() - startTime < INDICATION_TIMEOUT)

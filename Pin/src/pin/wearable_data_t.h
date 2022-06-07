@@ -3,13 +3,18 @@
 
 #include "pinDebug.h"
 
+/*
+ * This data type is what will be written and indicated to the app
+ * Note that for indication the payload has to be less than or equal to 20 bytes
+ * https://infocenter.nordicsemi.com/index.jsp?topic=%2Fcom.nordic.infocenter.sdk5.v15.0.0%2Flib_ble_gatt.html 
+ */
 typedef struct{
-  float temperature;            // 4 bytes - little endian
-  float humidity;               // 4 bytes - little endian
-  uint32_t  particle_2_5_count; // 4 bytes - little endian
-  uint32_t  particle_10_count;  // 4 bytes
-  uint32_t voc_data;            // 4 bytes
-  uint32_t co2_data;            // 4 bytes
+  float temperature;            // 4 bytes
+  float humidity;               // 4 bytes
+  uint16_t  particle_2_5_count; // 2 bytes
+  uint16_t  particle_10_count;  // 2 bytes
+  uint16_t voc_data;            // 2 bytes
+  uint16_t co2_data;            // 2 bytes
 } wearable_data_t;
 
 static void printWearableData(wearable_data_t wd)
