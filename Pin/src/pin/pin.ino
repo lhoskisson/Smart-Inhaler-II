@@ -25,11 +25,19 @@
 #define FAN_OFF_INTERVAL (FAN_ON_INTERVAL+FAN_ON_TIME)
 #define PM25_PIN 9
 #define FAN_PIN 11
+#define BLE_FAST_TIMEOUT 30 //amount of seconds advertising in fast mode, set to 0 for continuous
+#define BLE_ADV_DEFAULT_LENGTH 60 //amount of seconds advertising, set to 0 for continuous
+
+//functions that have default parameters must be explicitly prototyped in arduino
+void bleDisconnectHandler(uint16_t conn_hdl=0, uint8_t reason=0);
+void bleConnectionHandler(uint16_t conn_hdl=0);
+void startBleAdvertising(int seconds = BLE_ADV_DEFAULT_LENGTH);
 
 bool sgp30BaselineCalibrated = false;
 
 //4 timers: fan on, fan off, data collection, and SGP30 baseline recording
 Timer<4> timer;
+uintptr_t recordDataTask;
 
 wearableDataQueue q;
 
@@ -94,11 +102,8 @@ void setup()
    * QUEUE SETUP
    */
   q.begin();
- 
-  timer.every(DATA_COLLECTION_INTERVAL, recordWearableData);
-  timer.every(FAN_ON_INTERVAL, fanOn);
-  timer.every(FAN_OFF_INTERVAL, fanOff);
-  timer.every(SGP30_BASELINE_COLLECTION_INTERVAL, recordSgp30Baseline);
+
+
   
 #ifdef LIPO_CONNECTED
   lipo.quickStart();
@@ -131,6 +136,14 @@ void setup()
 #ifdef PM_SENSOR_CONNECTED
   aqi.begin_I2C();
 #endif
+
+  /*
+   * Timer Setup
+   */
+  startRecordingData();
+  timer.every(FAN_ON_INTERVAL, fanOn);
+  timer.every(FAN_OFF_INTERVAL, fanOff);
+  timer.every(SGP30_BASELINE_COLLECTION_INTERVAL, recordSgp30Baseline);
   
   /*
    * BLEDIS setup
@@ -142,7 +155,7 @@ void setup()
    */
   pinDataCharacteristic.setProperties(CHR_PROPS_READ | CHR_PROPS_INDICATE);
   pinDataCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-  pinDataCharacteristic.setFixedLen(sizeof(wearable_data_t));
+  //pinDataCharacteristic.setFixedLen(sizeof(wearable_data_t));
   
   //initialize ble settings
   Bluefruit.setName("Smart Pin");
@@ -163,6 +176,12 @@ void setup()
   Bluefruit.Advertising.addService(pinService);
   Bluefruit.Advertising.addAppearance(PIN_APPEARANCE);
   Bluefruit.Advertising.addName();
+  Bluefruit.Advertising.restartOnDisconnect(false);
+  Bluefruit.Advertising.setFastTimeout(BLE_FAST_TIMEOUT);
+  Bluefruit.Periph.setConnectCallback(bleConnectionHandler);
+  Bluefruit.Periph.setDisconnectCallback(bleDisconnectHandler);
+  Bluefruit.Periph.begin();
+  startBleAdvertising();
   Bluefruit.Advertising.start();
   
   /*
@@ -173,35 +192,14 @@ void setup()
 void loop() 
 {
   timer.tick();
-
-  if (Bluefruit.connected(Bluefruit.connHandle()) && !q.empty())
-  {
-#ifdef PIN_SERIAL_ON
-    Serial.println("BLE Connected, Sending Wearable Data");
-#endif
-    sendWearableData();
-  }
-
-#ifdef LIPO_CONNECTED
-#ifdef PIN_SERIAL_ON
- int voltage = lipo.getVoltage();
- int soc = lipo.getSOC();
- int alert = lipo.getAlert();
-  //Print out battery satus
-  //Serial.print("voltage"); Serial.print(voltage);Serial.println();
-  //Serial.print("state of charge"); Serial.print(soc);Serial.println();
-  //Serial.print("alert"); Serial.print(alert);Serial.println();
-#endif
-#endif
 }
 
 void sendWearableData()
 {
+  bool indicationSuccessful = false;
   while (!q.empty() && Bluefruit.connected(Bluefruit.connHandle()))
   {
     wearable_data_t wd = q.dequeue();
-
-    bool indicationSuccessful = false;
     unsigned long startTime = millis();
     while (!indicationSuccessful && millis() - startTime < INDICATION_TIMEOUT)
     {
@@ -216,6 +214,10 @@ void sendWearableData()
       Serial.println("Indication Timed Out!");
 #endif
   }
+  indicationSuccessful = false;
+  int8_t indicateEnd = 127;
+  while(!indicationSuccessful)
+    indicationSuccessful = pinDataCharacteristic.indicate(&indicateEnd, 1);
 #ifdef PIN_SERIAL_ON
   Serial.println("");
 #endif
@@ -325,4 +327,34 @@ uint32_t getAbsoluteHumidity(float temperature, float humidity)
     const float absoluteHumidity = 216.7f * ((humidity / 100.0f) * 6.112f * exp((17.62f * temperature) / (243.12f + temperature)) / (273.15f + temperature)); // [g/m^3]
     const uint32_t absoluteHumidityScaled = static_cast<uint32_t>(1000.0f * absoluteHumidity); // [mg/m^3]
     return absoluteHumidityScaled;
+}
+
+void bleConnectionHandler(uint16_t conn_hdl)
+{
+#ifdef PIN_SERIAL_ON
+  Serial.println("In BLE Connection Handler");
+#endif
+  sendWearableData();
+  timer.cancel(recordDataTask);
+}
+
+void bleDisconnectHandler(uint16_t conn_hdl, uint8_t reason)
+{
+#ifdef INHALER_SERIAL_ON
+  Serial.println("In BLE Disconnect Handler");
+#endif
+  startBleAdvertising();
+  startRecordingData();
+}
+
+void startBleAdvertising(int seconds)
+{
+  if(Bluefruit.Advertising.isRunning())
+    Bluefruit.Advertising.stop();
+  Bluefruit.Advertising.start(seconds);
+}
+
+void startRecordingData()
+{
+  recordDataTask = timer.every(DATA_COLLECTION_INTERVAL, recordWearableData);
 }
