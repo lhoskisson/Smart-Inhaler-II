@@ -88,12 +88,10 @@ void iueQueue::i_to_cstr(uint64_t n, char* s, const int len)
     
   //make string
   int mod = 10;
-  //for(int i = 0; i < digits-1; i++) mod *= 10;
   for(int i = (useDigits ? digits-1 : len-2); i >= 0; i--)
   {
     s[i] = (n % mod) + 48; //48 is ascii for '0'
     n /= 10;
-    //mod /= 10;
   }
 #ifdef INHALER_SERIAL_ON
   Serial.print(F("i_to_cstr converted "));

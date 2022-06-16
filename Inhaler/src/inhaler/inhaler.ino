@@ -3,9 +3,9 @@
 #include <SPI.h>
 #include <SdFat.h>
 #include <Adafruit_SPIFlash.h>
-#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>  // Fuel gauge
+#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>
 #include <Wire.h>
-#include "Adafruit_MPRLS.h" //pressure sensor
+#include "Adafruit_MPRLS.h"
 #include <arduino-timer.h>
 #include "IUE_t.h"
 #include "iueQueue.h"
@@ -19,15 +19,15 @@
 #define G_LED_PIN 15
 #define B_LED_PIN 14
 #define NEBULIZER_PIN 9
-#define BLE_LED_INDICATION_TIME 5000
-#define BATTERY_LED_INDICATION_TIME 5000
-#define IUE_TIME 5000 //Total nebulization running time during IUE
-#define IUE_TIMEOUT 15000
-#define INDICATION_TIMEOUT 5000
-#define PRESSURE_DELTA -50 //Pressure difference for IUE; negative is suck, positive is blow
+#define BLE_LED_INDICATION_TIME 5000 //amount of milliseconds that the LED will turn blue to indicate a BLE connection
+#define BATTERY_LED_INDICATION_TIME 5000 //amount of milliseconds that the LED will indicate battery status
+#define DOSAGE_TIME 5000 //amount of milliseconds that a dose is delivered
+#define IUE_TIMEOUT 15000 //amount of milliseconds that the pressure sensor looks for use after the IUE button is pressed
+#define INDICATION_TIMEOUT 5000 //amount of milliseconds that that the device will continuously try to send an IUE to the app upon failure
+#define PRESSURE_DELTA -50 //Pressure difference for IUE; negative is suck, positive is blow. Set to 0 to bypass pressure sensor.
 #define BLE_FAST_TIMEOUT 30 //amount of seconds advertising in fast mode, set to 0 for continuous
 #define BLE_ADV_DEFAULT_LENGTH 60 //amount of seconds advertising, set to 0 for continuous
-#define BLE_BLINK_INTERVAL 1000
+#define BLE_BLINK_INTERVAL 1000 //amount of milliseconds before the LED is toggled on or off while advertising
 
 //functions that have default parameters must be explicitly prototyped in arduino
 void bleDisconnectHandler(uint16_t conn_hdl=0, uint8_t reason=0);
@@ -82,12 +82,13 @@ bool bleLightOn = false;
 
 void setup()
 {
-  //#ifdef INHALER_SERIAL_ON
+#ifdef INHALER_SERIAL_ON
   Serial.begin(115200);
   while (!Serial);
   Serial.println("Serial Connected");
   Serial.flush();
-  //#endif
+#endif
+
   /*
      PIN SETUP
   */
@@ -119,14 +120,6 @@ void setup()
   */
 #ifdef RTC_CONNECTED
   RTC.begin();
-  //setSyncProvider(RTC.get);
-#ifdef INHALER_SERIAL_ON
-  if (timeStatus() != timeSet)
-    Serial.println(F("Unable to sync with the RTC"));
-  else
-    Serial.println(F("RTC has set the system time"));
-  //setRTCSerial();
-#endif
 #endif
 
 #ifdef LIPO_CONNECTED
@@ -180,18 +173,10 @@ void setup()
   Bluefruit.Advertising.addName();
   Bluefruit.Advertising.restartOnDisconnect(false);
   Bluefruit.Advertising.setFastTimeout(BLE_FAST_TIMEOUT);
-  //Bluefruit.Advertising.setStopCallback(bleDisconnectHandler);
   Bluefruit.Periph.setConnectCallback(bleConnectionHandler);
   Bluefruit.Periph.setDisconnectCallback(bleDisconnectHandler);
   Bluefruit.Periph.begin();
   startBleAdvertising();
-
-
-
-  /*
-     NON BLE SETUP
-  */
-  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop()
@@ -237,7 +222,7 @@ void handleIUE()
   int treatMillis = 0;
   unsigned long startTime = millis();
   unsigned long IUE_Accumulator = startTime;
-  while (treatMillis < IUE_TIME)
+  while (treatMillis < DOSAGE_TIME)
   {
     int currentPressureDelta = (int) mpr.readPressure() - Pressure_Ref;
     int currentMillis = millis();
@@ -315,7 +300,6 @@ void sendIUEs()
 #endif
   }
 }
-
 
 void batteryState()
 {
@@ -454,44 +438,5 @@ time_t getTime()
     Serial.println(F("Could not read time from RTC"));
 #endif
   return makeTime(tm);
-}
-#endif
-
-#ifdef RTC_CONNECTED
-void setRTCSerial()
-{
-  //EXAMPLE CODE FROM RTC Library to set RTC with Serial input
-#ifdef INHALER_SERIAL_ON
-  time_t t;
-  tmElements_t tm;
-  // check for input to set the RTC, minimum length is 12, i.e. yy,m,d,h,m,s
-  Serial.println(F("Enter UTC Date and time yy,m,d,h,m,s"));
-  while (!Serial.available());
-  if (Serial.available() >= 12) {
-    // note that the tmElements_t Year member is an offset from 1970,
-    // but the RTC wants the last two digits of the calendar year.
-    // use the convenience macros from the Time Library to do the conversions.
-    int y = Serial.parseInt();
-    if (y >= 100 && y < 1000)
-      Serial.println(F("Error: Year must be two digits or four digits!"));
-    else {
-      if (y >= 1000)
-        tm.Year = CalendarYrToTm(y);
-      else    // (y < 100)
-        tm.Year = y2kYearToTm(y);
-      tm.Month = Serial.parseInt();
-      tm.Day = Serial.parseInt();
-      tm.Hour = Serial.parseInt();
-      tm.Minute = Serial.parseInt();
-      tm.Second = Serial.parseInt();
-      t = makeTime(tm);
-      RTC.set(t);   // use the time_t value to ensure correct weekday is set
-      // dump any extraneous input
-      while (Serial.available() > 0) Serial.read();
-    }
-  }
-  Serial.println(F("leaving setRTC"));
-  Serial.flush();
-#endif
 }
 #endif

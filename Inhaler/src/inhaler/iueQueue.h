@@ -16,9 +16,6 @@
 //files are named as 16-bit integers, 5 is the most digits a 16-bit int will have. 5 digits + null terminator = 6
 #define IUE_FILENAME_MAX_LENGTH 6
 
-//20 digits possible for 64 bit decimal number
-#define IUE_MAX_LENGTH 20
-
 class iueQueue
 {
   public:
@@ -43,6 +40,5 @@ class iueQueue
   uint16_t getHeadFromFile();
   uint16_t getTailFromFile();
   void initializeHeadTail();
-  
 };
 #endif
