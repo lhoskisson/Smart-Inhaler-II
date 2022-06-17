@@ -15,7 +15,7 @@
 
 #include "pinDebug.h"
 
-#define DATA_COLLECTION_INTERVAL 10000//600000 //10min
+#define DATA_COLLECTION_INTERVAL 300000 //5min
 #define SGP30_BASELINE_CALIBRATION_TIME 43200000 //12 hours
 #define SGP30_BASELINE_COLLECTION_INTERVAL 3600000 //1 hour
 #define SGP30_BASELINE_FILENAME "baseline"
@@ -24,6 +24,7 @@
 #define FAN_ON_TIME 10000 //10 seconds
 #define FAN_OFF_INTERVAL (FAN_ON_INTERVAL+FAN_ON_TIME)
 #define PM25_PIN 9
+#define BLE_BUTTON_PIN 10
 #define FAN_PIN 11
 #define BLE_FAST_TIMEOUT 30 //amount of seconds advertising in fast mode, set to 0 for continuous
 #define BLE_ADV_DEFAULT_LENGTH 60 //amount of seconds advertising, set to 0 for continuous
@@ -34,6 +35,7 @@ void bleConnectionHandler(uint16_t conn_hdl=0);
 void startBleAdvertising(int seconds = BLE_ADV_DEFAULT_LENGTH);
 
 bool sgp30BaselineCalibrated = false;
+volatile bool bleButtonTriggered = false;
 
 //4 timers: fan on, fan off, data collection, and SGP30 baseline recording
 Timer<4> timer;
@@ -78,7 +80,6 @@ BLEDis bledis;
 
 void setup() 
 {
-
 #ifdef PIN_SERIAL_ON
   //setup serial connection for debug
   Serial.begin(115200);
@@ -87,10 +88,13 @@ void setup()
   Serial.flush();
 #endif
 
+  pinMode(BLE_BUTTON_PIN, INPUT);
   pinMode(FAN_PIN, OUTPUT); //set digital pin 11 as output
   pinMode(PM25_PIN,OUTPUT); //set pin 9 to be an output output
   digitalWrite(FAN_PIN, LOW);
   digitalWrite(PM25_PIN, HIGH);
+
+  attachInterrupt(digitalPinToInterrupt(BLE_BUTTON_PIN), setBleTriggered, RISING);
   
   fanOff(NULL);
   
@@ -104,9 +108,10 @@ void setup()
   q.begin();
 
 
+  Wire.begin();
   
 #ifdef LIPO_CONNECTED
-  lipo.quickStart();
+  while(!lipo.begin());
   lipo.setThreshold(10);
 #endif
 
@@ -182,16 +187,17 @@ void setup()
   Bluefruit.Periph.setDisconnectCallback(bleDisconnectHandler);
   Bluefruit.Periph.begin();
   startBleAdvertising();
-  Bluefruit.Advertising.start();
-  
-  /*
-   * NON BLE SETUP
-   */
 }
 
 void loop() 
 {
   timer.tick();
+
+  if(bleButtonTriggered)
+  {
+    startBleAdvertising();
+    bleButtonTriggered = false;
+  }
 }
 
 void sendWearableData()
@@ -349,6 +355,9 @@ void bleDisconnectHandler(uint16_t conn_hdl, uint8_t reason)
 
 void startBleAdvertising(int seconds)
 {
+#ifdef PIN_SERIAL_ON
+  Serial.println("Starting Advertising");
+#endif
   if(Bluefruit.Advertising.isRunning())
     Bluefruit.Advertising.stop();
   Bluefruit.Advertising.start(seconds);
@@ -357,4 +366,9 @@ void startBleAdvertising(int seconds)
 void startRecordingData()
 {
   recordDataTask = timer.every(DATA_COLLECTION_INTERVAL, recordWearableData);
+}
+
+void setBleTriggered()
+{
+  bleButtonTriggered = true;
 }
