@@ -40,7 +40,5 @@ class wearableDataQueue
   uint16_t getHeadFromFile();
   uint16_t getTailFromFile();
   void initializeHeadTail();
-  
 };
-
 #endif
